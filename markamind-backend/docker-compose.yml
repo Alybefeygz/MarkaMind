@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/markamind
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL:-https://dev-project.supabase.co}
+      - SUPABASE_KEY=${SUPABASE_KEY:-dev-anon-key-placeholder}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-dev-service-key-placeholder}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-sk-or-v1-dev-key-placeholder}
+      - SECRET_KEY=${SECRET_KEY:-dev-super-secret-key-change-in-production}
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=markamind
+      - POSTGRES_USER=postgres  
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d markamind"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery:
+    build: .
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/markamind
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL:-https://dev-project.supabase.co}
+      - SUPABASE_KEY=${SUPABASE_KEY:-dev-anon-key-placeholder}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-dev-service-key-placeholder}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-sk-or-v1-dev-key-placeholder}
+      - SECRET_KEY=${SECRET_KEY:-dev-super-secret-key-change-in-production}
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

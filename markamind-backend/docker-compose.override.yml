@@ -1,0 +1,29 @@
+# Docker Compose override for development
+# This file is automatically loaded by docker-compose for local development
+
+version: '3.8'
+
+services:
+  api:
+    # Development-specific settings
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    # Mount source code for hot reload
+    volumes:
+      - .:/app
+      - /app/venv  # Exclude venv from volume mount
+    # Enable hot reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+    
+  # Override Celery for development
+  celery:
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - .:/app
+      - /app/venv  # Exclude venv from volume mount
+    command: celery -A app.tasks.celery_app worker --loglevel=debug --reload
