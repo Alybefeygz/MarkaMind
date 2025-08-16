@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(npx create-next-app:*)",
+      "Bash(npm install:*)",
+      "Bash(npx:*)",
+      "Bash(rm:*)"
+    ],
+    "deny": [],
+    "defaultMode": "acceptEdits"
+  }
+}
