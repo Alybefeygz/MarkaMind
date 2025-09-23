@@ -23,7 +23,7 @@ const platformColors = {
 }
 
 // Örnek ürün verileri - Bu normalde props olarak gelir veya state'te tutulur
-let productList = {
+export const productList = {
   1: [ // TechMall Store ürünleri
     { 
       id: 1, 
@@ -119,6 +119,12 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   
   // Mağaza ekleme sayfası state'leri
   const [showAddStorePage, setShowAddStorePage] = useState(false)
+  const [showEditStorePage, setShowEditStorePage] = useState(false)
+  const [editingStore, setEditingStore] = useState(null)
+
+  // Ürün düzenleme state'leri
+  const [showEditProductPage, setShowEditProductPage] = useState(false)
+  const [editingProduct, setEditingProduct] = useState(null)
   const [newStore, setNewStore] = useState({
     name: '',
     description: '',
@@ -144,13 +150,31 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
   // Color picker modal states
   const [activeColorPicker, setActiveColorPicker] = useState(null)
-  
+
   // Platform dropdown state
   const [isPlatformDropdownOpen, setIsPlatformDropdownOpen] = useState(false)
-  
+
+  // Store card dropdown state
+  const [openStoreDropdown, setOpenStoreDropdown] = useState(null)
+
+  // Delete confirmation card state (sağ alt köşe için)
+  const [showDeleteCard, setShowDeleteCard] = useState(false)
+  const [storeToDelete, setStoreToDelete] = useState(null)
+  const [isCardClosing, setIsCardClosing] = useState(false)
+
+  // Product card dropdown state
+  const [openProductDropdown, setOpenProductDropdown] = useState(null)
+
+  // Product delete confirmation card state
+  const [showProductDeleteCard, setShowProductDeleteCard] = useState(false)
+  const [productToDelete, setProductToDelete] = useState(null)
+  const [isProductCardClosing, setIsProductCardClosing] = useState(false)
+
   // Click outside handler için refs
   const colorPickerRefs = useRef({})
   const platformDropdownRef = useRef(null)
+  const storeDropdownRef = useRef(null)
+  const productDropdownRef = useRef(null)
 
   // Sayfa yüklendiğinde animasyonu başlat
   useEffect(() => {
@@ -191,13 +215,27 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           setIsPlatformDropdownOpen(false)
         }
       }
+
+      // Store dropdown click outside
+      if (openStoreDropdown) {
+        if (storeDropdownRef.current && !storeDropdownRef.current.contains(event.target)) {
+          setOpenStoreDropdown(null)
+        }
+      }
+
+      // Product dropdown click outside
+      if (openProductDropdown) {
+        if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
+          setOpenProductDropdown(null)
+        }
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [activeColorPicker, isPlatformDropdownOpen])
+  }, [activeColorPicker, isPlatformDropdownOpen, openStoreDropdown, openProductDropdown])
 
   // Platform değiştiğinde color picker'ları kapat
   useEffect(() => {
@@ -259,7 +297,10 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   // Mağaza ekleme sayfasını kapat
   const handleBackToStoreList = () => {
     setShowAddStorePage(false)
+    setShowEditStorePage(false)
+    setEditingStore(null)
     setIsPlatformDropdownOpen(false)
+    setOpenStoreDropdown(null)
     setNewStore({
       name: '',
       description: '',
@@ -281,9 +322,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     // selectedStore'u null yapmıyoruz çünkü hangi mağazaya ürün eklediğimizi bilmek gerekiyor
   }
 
-  // Ürün ekleme sayfasını kapat ve mağaza detayına dön
+  // Ürün ekleme/düzenleme sayfasını kapat ve mağaza detayına dön
   const handleBackToProductList = () => {
     setShowAddProductPage(false)
+    setShowEditProductPage(false)
+    setEditingProduct(null)
     setNewProduct({
       name: '',
       price: '',
@@ -336,6 +379,24 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     }
   }
 
+  // Mağaza düzenleme sayfasını aç
+  const handleEditStore = (store) => {
+    setEditingStore(store)
+    setNewStore({
+      name: store.name,
+      description: store.description || '',
+      platform: store.platform,
+      logo: store.logo,
+      logoPreview: store.logo,
+      primaryColor: store.primaryColor,
+      secondaryColor: store.secondaryColor,
+      textColor: store.textColor
+    })
+    setShowEditStorePage(true)
+    setIsVisible(false)
+    setTimeout(() => setIsVisible(true), 100)
+  }
+
   // Yeni mağaza oluştur - İLK SIRAYA EKLE (tema renkleri değişsin)
   const handleCreateStore = () => {
     if (newStore.name && newStore.description && newStore.platform && newStore.logoPreview) {
@@ -350,11 +411,161 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
         secondaryColor: newStore.secondaryColor,
         textColor: newStore.textColor
       }
-      
+
       // YENİ MAĞAZAYI LİSTENİN BAŞINA EKLE - Bu tema renklerini değiştirecek!
       setStoreList([newStoreData, ...storeList])
       handleBackToStoreList()
     }
+  }
+
+  // Mağaza güncelleme işlevi
+  const handleUpdateStore = () => {
+    if (editingStore && newStore.name && newStore.platform && newStore.logoPreview) {
+      const updatedStore = {
+        ...editingStore,
+        name: newStore.name,
+        description: newStore.description,
+        platform: newStore.platform,
+        logo: newStore.logoPreview,
+        primaryColor: newStore.primaryColor,
+        secondaryColor: newStore.secondaryColor,
+        textColor: newStore.textColor
+      }
+
+      // Mağaza listesinde güncelle
+      const updatedStoreList = storeList.map(store =>
+        store.id === editingStore.id ? updatedStore : store
+      )
+      setStoreList(updatedStoreList)
+
+      // Güncellenen mağaza seçili mağaza ise selectedStore'u da güncelle
+      if (selectedStore && selectedStore.id === editingStore.id) {
+        setSelectedStore(updatedStore)
+      }
+
+      handleBackToStoreList()
+    }
+  }
+
+  // Mağaza silme onay kartını aç
+  const handleDeleteStore = (store) => {
+    setStoreToDelete(store)
+    setShowDeleteCard(true)
+    setOpenStoreDropdown(null)
+  }
+
+  // Mağaza silme işlemini onayla
+  const confirmDeleteStore = () => {
+    if (storeToDelete) {
+      // Çıkış animasyonunu başlat
+      setIsCardClosing(true)
+
+      // Animasyon bitene kadar bekle, sonra silme işlemini yap
+      setTimeout(() => {
+        // Mağaza listesinden sil
+        const updatedStoreList = storeList.filter(store => store.id !== storeToDelete.id)
+        setStoreList(updatedStoreList)
+
+        // Eğer silinen mağaza şu an seçili mağaza ise, seçimi temizle
+        if (selectedStore && selectedStore.id === storeToDelete.id) {
+          setSelectedStore(null)
+          setSelectedProduct(null)
+        }
+
+        // Silinen mağazanın ürünlerini de temizle
+        setProducts(prev => {
+          const newProducts = { ...prev }
+          delete newProducts[storeToDelete.id]
+          return newProducts
+        })
+
+        // Kartı kapat
+        setShowDeleteCard(false)
+        setStoreToDelete(null)
+        setIsCardClosing(false)
+      }, 300) // Animasyon süresi kadar bekle
+    }
+  }
+
+  // Mağaza silme işlemini iptal et
+  const cancelDeleteStore = () => {
+    // Çıkış animasyonunu başlat
+    setIsCardClosing(true)
+
+    // Animasyon bitene kadar bekle, sonra kartı kapat
+    setTimeout(() => {
+      setShowDeleteCard(false)
+      setStoreToDelete(null)
+      setIsCardClosing(false)
+    }, 300) // Animasyon süresi kadar bekle
+  }
+
+  // Ürün düzenleme sayfasını aç
+  const handleEditProduct = (product) => {
+    setEditingProduct(product)
+    setNewProduct({
+      name: product.name,
+      price: product.price,
+      category: product.category,
+      description: product.description,
+      reviewCount: product.reviewCount || 0, // Mevcut yorum sayısını al, yoksa 0
+      images: [],
+      imagePreviews: product.images || [product.image] // Mevcut görselleri yükle
+    })
+    setShowEditProductPage(true)
+    setOpenProductDropdown(null)
+  }
+
+  // Ürün silme onay kartını aç
+  const handleDeleteProduct = (product) => {
+    setProductToDelete(product)
+    setShowProductDeleteCard(true)
+    setOpenProductDropdown(null)
+  }
+
+  // Ürün silme işlemini onayla
+  const confirmDeleteProduct = () => {
+    if (productToDelete && selectedStore) {
+      // Çıkış animasyonunu başlat
+      setIsProductCardClosing(true)
+
+      // Animasyon bitene kadar bekle, sonra silme işlemini yap
+      setTimeout(() => {
+        // Ürünü ilgili mağazanın ürün listesinden sil
+        setProducts(prev => {
+          const newProducts = { ...prev }
+          if (newProducts[selectedStore.id]) {
+            newProducts[selectedStore.id] = newProducts[selectedStore.id].filter(
+              product => product.id !== productToDelete.id
+            )
+          }
+          return newProducts
+        })
+
+        // Eğer silinen ürün şu an seçili ürün ise, seçimi temizle
+        if (selectedProduct && selectedProduct.id === productToDelete.id) {
+          setSelectedProduct(null)
+        }
+
+        // Kartı kapat
+        setShowProductDeleteCard(false)
+        setProductToDelete(null)
+        setIsProductCardClosing(false)
+      }, 300) // Animasyon süresi kadar bekle
+    }
+  }
+
+  // Ürün silme işlemini iptal et
+  const cancelDeleteProduct = () => {
+    // Çıkış animasyonunu başlat
+    setIsProductCardClosing(true)
+
+    // Animasyon bitene kadar bekle, sonra kartı kapat
+    setTimeout(() => {
+      setShowProductDeleteCard(false)
+      setProductToDelete(null)
+      setIsProductCardClosing(false)
+    }, 300) // Animasyon süresi kadar bekle
   }
 
   // Eğer bir ürün seçildiyse ürün detayını göster
@@ -541,8 +752,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     )
   }
 
-  // Eğer mağaza ekleme sayfası açıksa göster
-  if (showAddStorePage) {
+  // Eğer mağaza ekleme veya düzenleme sayfası açıksa göster
+  if (showAddStorePage || showEditStorePage) {
     return (
       <div className="relative">
         
@@ -574,8 +785,12 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
               {/* Başlık */}
               <div>
-                <h2 className="text-base sm:text-lg lg:text-xl font-bold text-[#1F1F1F]">Yeni Mağaza Ekle</h2>
-                <p className="text-xs sm:text-sm text-[#666]">Mağaza bilgilerini girin</p>
+                <h2 className="text-base sm:text-lg lg:text-xl font-bold text-[#1F1F1F]">
+                  {showEditStorePage ? 'Mağaza Düzenle' : 'Yeni Mağaza Ekle'}
+                </h2>
+                <p className="text-xs sm:text-sm text-[#666]">
+                  {showEditStorePage ? 'Mağaza bilgilerini düzenleyin' : 'Mağaza bilgilerini girin'}
+                </p>
               </div>
             </div>
           </div>
@@ -824,8 +1039,19 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   İptal
                 </button>
                 <button
-                  onClick={handleCreateStore}
-                  disabled={!newStore.name || !newStore.description || !newStore.platform || !newStore.logoPreview}
+                  onClick={showEditStorePage ? handleUpdateStore : handleCreateStore}
+                  disabled={showEditStorePage
+                    ? (!newStore.name || !newStore.platform || !newStore.logoPreview ||
+                       (editingStore &&
+                        newStore.name === editingStore.name &&
+                        newStore.description === (editingStore.description || '') &&
+                        newStore.platform === editingStore.platform &&
+                        newStore.logoPreview === editingStore.logo &&
+                        newStore.primaryColor === editingStore.primaryColor &&
+                        newStore.secondaryColor === editingStore.secondaryColor &&
+                        newStore.textColor === editingStore.textColor))
+                    : (!newStore.name || !newStore.description || !newStore.platform || !newStore.logoPreview)
+                  }
                   className="flex-1 px-4 sm:px-6 py-2 sm:py-3 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                   style={{
                     background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`,
@@ -841,7 +1067,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
-                  Mağazayı Oluştur
+                  {showEditStorePage ? 'Değişiklikleri Kaydet' : 'Mağazayı Oluştur'}
                 </button>
               </div>
 
@@ -959,8 +1185,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     )
   }
 
-  // Eğer ürün ekleme sayfası açıksa göster
-  if (showAddProductPage) {
+  // Eğer ürün ekleme veya düzenleme sayfası açıksa göster
+  if (showAddProductPage || showEditProductPage) {
     return (
       <div className="relative">
         
@@ -992,8 +1218,12 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
               {/* Başlık */}
               <div>
-                <h2 className="text-base sm:text-lg lg:text-xl font-bold text-[#1F1F1F]">Yeni Ürün Ekle</h2>
-                <p className="text-xs sm:text-sm text-[#666]">Ürün bilgilerini girin</p>
+                <h2 className="text-base sm:text-lg lg:text-xl font-bold text-[#1F1F1F]">
+                  {showEditProductPage ? 'Ürün Düzenle' : 'Yeni Ürün Ekle'}
+                </h2>
+                <p className="text-xs sm:text-sm text-[#666]">
+                  {showEditProductPage ? 'Ürün bilgilerini düzenleyin' : 'Ürün bilgilerini girin'}
+                </p>
               </div>
             </div>
           </div>
@@ -1016,7 +1246,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   value={newProduct.name}
                   onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
                   placeholder="Ürün adını girin"
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-sm sm:text-base placeholder-gray-500"
+                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-gray-900 placeholder-gray-500 text-sm sm:text-base"
                 />
               </div>
 
@@ -1030,7 +1260,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   value={newProduct.price}
                   onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
                   placeholder="₺0.00 - Ürün fiyatını girin"
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-sm sm:text-base placeholder-gray-500"
+                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-gray-900 placeholder-gray-500 text-sm sm:text-base"
                 />
               </div>
 
@@ -1044,7 +1274,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   value={newProduct.category}
                   onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
                   placeholder="Telefon, Laptop, Aksesuar vb. - Kategori girin"
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-sm sm:text-base placeholder-gray-500"
+                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-gray-900 placeholder-gray-500 text-sm sm:text-base"
                 />
               </div>
 
@@ -1058,7 +1288,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
                   placeholder="Ürün hakkında detaylı bilgi, özellikler, kullanım alanları... Buraya ürünün açıklamasını yazın."
                   rows="4"
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors resize-none text-sm sm:text-base placeholder-gray-500"
+                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors resize-none text-gray-900 placeholder-gray-500 text-sm sm:text-base"
                 />
               </div>
 
@@ -1216,56 +1446,92 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 <button
                   onClick={() => {
                     if (selectedStore && newProduct.name && newProduct.price && newProduct.category && newProduct.description && newProduct.imagePreviews.length > 0) {
-                      // Seçilen sayı kadar hazır yorum oluştur
-                      const selectedReviews = newProduct.reviewCount > 0 
-                        ? sampleReviews.slice(0, newProduct.reviewCount).map((review, index) => ({
-                            ...review,
-                            id: Date.now() + index
-                          }))
-                        : []
 
-                      // Ortalama rating hesapla (yorumlar varsa)
-                      const averageRating = selectedReviews.length > 0 
-                        ? selectedReviews.reduce((sum, review) => sum + review.rating, 0) / selectedReviews.length
-                        : 4.5
+                      if (showEditProductPage && editingProduct) {
+                        // Ürün düzenleme işlemi
+                        const updatedProduct = {
+                          ...editingProduct,
+                          name: newProduct.name,
+                          price: newProduct.price,
+                          category: newProduct.category,
+                          description: newProduct.description,
+                          image: newProduct.imagePreviews[0], // Ana görsel
+                          images: newProduct.imagePreviews, // Tüm görseller
+                        }
 
-                      // Yeni ürün oluştur
-                      const newProductData = {
-                        id: Date.now(), // Unique ID için timestamp kullan
-                        name: newProduct.name,
-                        price: newProduct.price,
-                        category: newProduct.category,
-                        description: newProduct.description,
-                        image: newProduct.imagePreviews[0], // Ana görsel
-                        images: newProduct.imagePreviews, // Tüm görseller
-                        rating: Math.round(averageRating * 10) / 10 // Rating'i yuvarla
+                        // Ürünü products state'inde güncelle
+                        setProducts(prev => ({
+                          ...prev,
+                          [selectedStore.id]: prev[selectedStore.id].map(product =>
+                            product.id === editingProduct.id ? updatedProduct : product
+                          )
+                        }))
+
+                        console.log('Ürün güncellendi:', updatedProduct, 'Mağaza:', selectedStore.name)
+
+                      } else {
+                        // Yeni ürün ekleme işlemi
+                        // Seçilen sayı kadar hazır yorum oluştur
+                        const selectedReviews = newProduct.reviewCount > 0
+                          ? sampleReviews.slice(0, newProduct.reviewCount).map((review, index) => ({
+                              ...review,
+                              id: Date.now() + index
+                            }))
+                          : []
+
+                        // Ortalama rating hesapla (yorumlar varsa)
+                        const averageRating = selectedReviews.length > 0
+                          ? selectedReviews.reduce((sum, review) => sum + review.rating, 0) / selectedReviews.length
+                          : 4.5
+
+                        // Yeni ürün oluştur
+                        const newProductData = {
+                          id: Date.now(), // Unique ID için timestamp kullan
+                          name: newProduct.name,
+                          price: newProduct.price,
+                          category: newProduct.category,
+                          description: newProduct.description,
+                          image: newProduct.imagePreviews[0], // Ana görsel
+                          images: newProduct.imagePreviews, // Tüm görseller
+                          rating: Math.round(averageRating * 10) / 10 // Rating'i yuvarla
+                        }
+
+                        // Ürünü seçili mağazanın ürün listesine ekle
+                        setProducts(prev => ({
+                          ...prev,
+                          [selectedStore.id]: [
+                            ...(prev[selectedStore.id] || []),
+                            newProductData
+                          ]
+                        }))
+
+                        // Eğer yorum varsa, yorumları da ekle
+                        if (selectedReviews.length > 0) {
+                          // reviewsList'e de ekle (ürün detay sayfasında görünmesi için)
+                          const currentReviews = { ...reviewsList }
+                          currentReviews[newProductData.id] = selectedReviews
+                          // Bu normalde bir state olmalı ama şimdilik global değişken kullanıyoruz
+                          Object.assign(reviewsList, currentReviews)
+                        }
+
+                        console.log('Yeni ürün oluşturuldu:', newProductData, 'Mağaza:', selectedStore.name, 'Yorumlar:', selectedReviews)
                       }
-                      
-                      // Ürünü seçili mağazanın ürün listesine ekle
-                      setProducts(prev => ({
-                        ...prev,
-                        [selectedStore.id]: [
-                          ...(prev[selectedStore.id] || []),
-                          newProductData
-                        ]
-                      }))
 
-                      // Eğer yorum varsa, yorumları da ekle
-                      if (selectedReviews.length > 0) {
-                        // reviewsList'e de ekle (ürün detay sayfasında görünmesi için)
-                        const currentReviews = { ...reviewsList }
-                        currentReviews[newProductData.id] = selectedReviews
-                        // Bu normalde bir state olmalı ama şimdilik global değişken kullanıyoruz
-                        Object.assign(reviewsList, currentReviews)
-                      }
-                      
-                      console.log('Yeni ürün oluşturuldu:', newProductData, 'Mağaza:', selectedStore.name, 'Yorumlar:', selectedReviews)
-                      
                       // Form'u temizle ve mağaza detay sayfasına dön
                       handleBackToProductList()
                     }
                   }}
-                  disabled={!newProduct.name || !newProduct.price || !newProduct.category || !newProduct.description || newProduct.imagePreviews.length === 0}
+                  disabled={showEditProductPage
+                    ? (!newProduct.name || !newProduct.price || !newProduct.category || !newProduct.description || newProduct.imagePreviews.length === 0 ||
+                       (editingProduct &&
+                        newProduct.name === editingProduct.name &&
+                        newProduct.price === editingProduct.price &&
+                        newProduct.category === editingProduct.category &&
+                        newProduct.description === editingProduct.description &&
+                        newProduct.reviewCount === (editingProduct.reviewCount || 0) &&
+                        JSON.stringify(newProduct.imagePreviews) === JSON.stringify(editingProduct.images || [editingProduct.image])))
+                    : (!newProduct.name || !newProduct.price || !newProduct.category || !newProduct.description || newProduct.imagePreviews.length === 0)
+                  }
                   className="flex-1 px-4 sm:px-6 py-2 sm:py-3 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                   style={{
                     background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`,
@@ -1281,7 +1547,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
-                  Ürünü Oluştur
+                  {showEditProductPage ? 'Değişiklikleri Kaydet' : 'Ürünü Oluştur'}
                 </button>
               </div>
 
@@ -1457,30 +1723,83 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
         {/* Ürün Kartları Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mx-3 sm:mx-6 lg:mx-12 xl:mx-20">
           {storeProducts.map((product, index) => (
-            <div 
+            <div
               key={product.id}
-              onClick={() => handleProductClick(product)}
-              className={`bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] hover:shadow-[0px_12px_32px_rgba(100,52,248,0.12)] hover:scale-105 group border border-transparent hover:border-[#6434F8]/20 cursor-pointer aspect-[3/4] ${getCardAnimation(index)}`}
-              style={{ 
+              className={`bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] hover:shadow-[0px_12px_32px_rgba(100,52,248,0.12)] hover:scale-105 group border border-transparent hover:border-[#6434F8]/20 cursor-pointer aspect-[3/4] relative ${getCardAnimation(index)}`}
+              style={{
                 animationDelay: getAnimationDelay(index)
               }}
             >
+              {/* 3 Nokta Dropdown */}
+              <div className="absolute top-2 right-2 z-10">
+                <div className="relative">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation() // Kartın onClick'ini engelle
+                      setOpenProductDropdown(openProductDropdown === product.id ? null : product.id)
+                    }}
+                    className="p-1 rounded-full hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <MoreHorizontal className="w-4 h-4 text-gray-600" />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {openProductDropdown === product.id && (
+                    <div
+                      ref={productDropdownRef}
+                      className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[120px] overflow-hidden"
+                    >
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEditProduct(product)
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
+                      >
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                        <span>Düzenle</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteProduct(product)
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2 transition-colors"
+                      >
+                        <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        <span>Sil</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Ürün Görseli */}
-              <div className="mb-2 sm:mb-3">
-                <img 
-                  src={product.image} 
+              <div
+                className="mb-2 sm:mb-3"
+                onClick={() => handleProductClick(product)}
+              >
+                <img
+                  src={product.image}
                   alt={product.name}
                   className="w-full aspect-[3/4] object-cover rounded-md sm:rounded-lg border border-gray-200"
                 />
               </div>
 
               {/* Ürün Bilgileri */}
-              <div className="text-center flex-1 flex flex-col justify-between">
+              <div
+                className="text-center flex-1 flex flex-col justify-between"
+                onClick={() => handleProductClick(product)}
+              >
                 <div>
                   <h3 className="text-xs sm:text-sm font-bold text-[#1F1F1F] mb-1">{product.name}</h3>
                   <p className="text-xs text-[#666] mb-1 sm:mb-2">{product.category}</p>
                 </div>
-                <div 
+                <div
                   className="text-sm sm:text-base lg:text-lg font-bold"
                   style={{ color: selectedStore.primaryColor }}
                 >
@@ -1545,6 +1864,65 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           </div>
         </div>
 
+        {/* Product Delete Confirmation Card - Sağ Alt Köşe */}
+        {showProductDeleteCard && productToDelete && (
+          <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 max-w-sm w-full sm:w-auto z-50 transform transition-all duration-300 ease-out ${
+            isProductCardClosing ? 'animate-slide-to-right' : 'animate-slide-from-right'
+          }`}>
+            <div className="flex items-start space-x-4">
+              {/* Icon */}
+              <div className="flex-shrink-0">
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center"
+                  style={{
+                    background: `linear-gradient(135deg, #FEF2F2, #FECACA)`
+                  }}
+                >
+                  <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                  </svg>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                  Ürün Sil
+                </h4>
+                <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+                  <span className="font-medium text-gray-900">{productToDelete.name}</span> ürününü silmek istediğinize emin misiniz?
+                </p>
+
+                {/* Buttons */}
+                <div className="flex space-x-2">
+                  <button
+                    onClick={cancelDeleteProduct}
+                    className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    onClick={confirmDeleteProduct}
+                    className="flex-1 px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    Sil
+                  </button>
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <button
+                onClick={cancelDeleteProduct}
+                className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+              >
+                <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
     )
   }
@@ -1589,7 +1967,51 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     <Star className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-white" />
                   </button>
                 )}
-                <MoreHorizontal className="w-3 sm:w-4 h-3 sm:h-4 text-white/70 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation() // Kartın onClick'ini engelle
+                      setOpenStoreDropdown(openStoreDropdown === store.id ? null : store.id)
+                    }}
+                    className="p-1 rounded-full hover:bg-white/20 transition-colors"
+                  >
+                    <MoreHorizontal className="w-3 sm:w-4 h-3 sm:h-4 text-white/70 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {openStoreDropdown === store.id && (
+                    <div
+                      ref={storeDropdownRef}
+                      className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[140px] overflow-hidden"
+                    >
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOpenStoreDropdown(null)
+                          handleEditStore(store)
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
+                      >
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                        <span>Düzenle</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteStore(store)
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2 transition-colors"
+                      >
+                        <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        <span>Sil</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1673,6 +2095,65 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Card - Sağ Alt Köşe */}
+      {showDeleteCard && storeToDelete && (
+        <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 max-w-sm w-full sm:w-auto z-50 transform transition-all duration-300 ease-out ${
+          isCardClosing ? 'animate-slide-to-right' : 'animate-slide-from-right'
+        }`}>
+          <div className="flex items-start space-x-4">
+            {/* Icon */}
+            <div className="flex-shrink-0">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center"
+                style={{
+                  background: `linear-gradient(135deg, #FEF2F2, #FECACA)`
+                }}
+              >
+                <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                Mağaza Sil
+              </h4>
+              <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+                <span className="font-medium text-gray-900">{storeToDelete.name}</span> mağazasını silmek istediğinize emin misiniz?
+              </p>
+
+              {/* Buttons */}
+              <div className="flex space-x-2">
+                <button
+                  onClick={cancelDeleteStore}
+                  className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={confirmDeleteStore}
+                  className="flex-1 px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Sil
+                </button>
+              </div>
+            </div>
+
+            {/* Close Button */}
+            <button
+              onClick={cancelDeleteStore}
+              className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+            >
+              <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
 
     </div>

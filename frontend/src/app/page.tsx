@@ -3,7 +3,7 @@
 import Sidebar from '@/components/Sidebar'
 import HomePage from '@/components/HomePage'
 import ChatboxManagement from '@/components/ChatboxManagement'
-import VirtualStore from '@/components/VirtualStore'
+import VirtualStore, { productList } from '@/components/VirtualStore'
 import { Menu, ChevronDown, Plus, MessageSquare } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 
@@ -316,7 +316,7 @@ export default function Home() {
           {/* Diğer Sayfalar */}
           {showOtherPage && (
             <>
-              {currentPage === 1 && <ChatboxManagement activeTab={activeTab} themeColors={themeColors} />}
+              {currentPage === 1 && <ChatboxManagement activeTab={activeTab} themeColors={themeColors} storeList={storeList} productList={productList} />}
               {currentPage === 2 && <VirtualStore themeColors={themeColors} storeList={storeList} setStoreList={setStoreList} />}
               {currentPage !== 1 && currentPage !== 2 && (
                 <div className="flex items-center justify-center h-96">

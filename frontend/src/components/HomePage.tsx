@@ -195,7 +195,7 @@ export default function HomePage({ shouldExit, onAnimationComplete, isActive, th
               <MessageSquare className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h3 className="text-2xl font-bold text-[#1F1F1F]">Aktif Chatbox'lar</h3>
+              <h3 className="text-2xl font-bold text-[#1F1F1F]">Aktif Chatbox&apos;lar</h3>
               <p className="text-base text-[#666]">Toplam etkileşim merkezi sayısı</p>
             </div>
           </div>

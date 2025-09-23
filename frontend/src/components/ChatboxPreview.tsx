@@ -72,7 +72,7 @@ export default function ChatboxPreview() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center mb-20">
           <h2 className="text-3xl font-bold text-gray-800 mb-4">Chatbox Önizleme</h2>
-          <p className="text-gray-600 mb-8 max-w-md">Chatbox'ınızın müşteriler tarafından nasıl görüneceğini test edin. Aşağıdaki chatbox ile etkileşime geçebilirsiniz.</p>
+          <p className="text-gray-600 mb-8 max-w-md">Chatbox&apos;ınızın müşteriler tarafından nasıl görüneceğini test edin. Aşağıdaki chatbox ile etkileşime geçebilirsiniz.</p>
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronDown, Plus, MessageSquare, Settings, Trash2, Eye, ArrowLeft, Send, User, Home, Bot, Zap, Palette, Undo2, Copy } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ChatboxPrivatization from './ChatboxPrivatization'
 import ChatboxElements from './ChatboxElements'
 
@@ -12,7 +12,7 @@ const chatboxList = [
   { id: 3, name: 'Mag4ever Chatbox', status: 'inactive', messages: 456 }
 ]
 
-export default function ChatboxManagement({ activeTab, themeColors }) {
+export default function ChatboxManagement({ activeTab, themeColors, storeList, productList }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [selectedChatbox, setSelectedChatbox] = useState(chatboxList[0])
   const [isChatboxVisible, setIsChatboxVisible] = useState(true)
@@ -52,6 +52,16 @@ export default function ChatboxManagement({ activeTab, themeColors }) {
   // Animasyon state'leri
   const [isVisible, setIsVisible] = useState(false)
 
+  // Mağaza seçimi state'leri
+  const [selectedStores, setSelectedStores] = useState([])
+  const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false)
+  const storeDropdownRef = useRef(null)
+
+  // Ürün seçimi state'leri
+  const [selectedProducts, setSelectedProducts] = useState([])
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false)
+  const productDropdownRef = useRef(null)
+
   // Sayfa yüklendiğinde ve sekme değiştiğinde animasyonu başlat
   useEffect(() => {
     if (activeTab === 'Önizleme') {
@@ -73,6 +83,23 @@ export default function ChatboxManagement({ activeTab, themeColors }) {
         setIsVisible(true)
       }, 100)
       return () => clearTimeout(timer)
+    }
+  }, [])
+
+  // Click-outside handler for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (storeDropdownRef.current && !storeDropdownRef.current.contains(event.target)) {
+        setIsStoreDropdownOpen(false)
+      }
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
+        setIsProductDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [])
 
@@ -159,6 +186,112 @@ export default function ChatboxManagement({ activeTab, themeColors }) {
       ...prev,
       [pdfName]: false
     }))
+  }
+
+  // Mağaza seçimi fonksiyonları
+  const handleStoreSelection = (storeId) => {
+    if (storeId === 'all') {
+      // Tüm mağazalar seçildi
+      if (selectedStores.includes('all')) {
+        setSelectedStores([]) // Tüm seçimi kaldır
+      } else {
+        setSelectedStores(['all']) // Sadece tüm mağazalar seç
+      }
+    } else {
+      // Tekil mağaza seçimi
+      if (selectedStores.includes('all')) {
+        // Eğer "tüm mağazalar" seçiliyse, onu kaldır ve bu mağazayı ekle
+        setSelectedStores([storeId])
+      } else {
+        // Normal çoklu seçim
+        setSelectedStores(prev =>
+          prev.includes(storeId)
+            ? prev.filter(id => id !== storeId)
+            : [...prev, storeId]
+        )
+      }
+    }
+  }
+
+  const getStoreSelectionText = () => {
+    if (selectedStores.length === 0) {
+      return 'Mağaza seçin'
+    }
+    if (selectedStores.includes('all')) {
+      return 'Tüm Mağazalar'
+    }
+    if (selectedStores.length === 1) {
+      const store = storeList.find(store => store.id === selectedStores[0])
+      return store ? store.name : 'Mağaza seçin'
+    }
+    return `${selectedStores.length} mağaza seçildi`
+  }
+
+  // Seçilen mağazalar değiştiğinde ürün seçimini resetle
+  useEffect(() => {
+    setSelectedProducts([])
+  }, [selectedStores])
+
+  // Seçilen mağazalara göre mevcut ürünleri getir
+  const getAvailableProducts = () => {
+    if (selectedStores.includes('all')) {
+      // Tüm mağazalar seçiliyse, tüm ürünleri döndür
+      return Object.values(productList || {}).flat()
+    }
+
+    // Seçilen mağazaların ürünlerini döndür
+    return selectedStores.reduce((allProducts, storeId) => {
+      const storeProducts = productList?.[storeId] || []
+      return [...allProducts, ...storeProducts]
+    }, [])
+  }
+
+  // Ürün seçimi fonksiyonları
+  const handleProductSelection = (productId) => {
+    if (productId === 'all') {
+      const availableProducts = getAvailableProducts()
+      if (selectedProducts.includes('all')) {
+        setSelectedProducts([]) // Tüm seçimi kaldır
+      } else {
+        setSelectedProducts(['all']) // Sadece tüm ürünler seç
+      }
+    } else {
+      // Tekil ürün seçimi
+      if (selectedProducts.includes('all')) {
+        // Eğer "tüm ürünler" seçiliyse, onu kaldır ve bu ürünü ekle
+        setSelectedProducts([productId])
+      } else {
+        // Normal çoklu seçim
+        setSelectedProducts(prev =>
+          prev.includes(productId)
+            ? prev.filter(id => id !== productId)
+            : [...prev, productId]
+        )
+      }
+    }
+  }
+
+  const getProductSelectionText = () => {
+    if (selectedStores.length === 0) {
+      return 'Önce mağaza seçin'
+    }
+
+    const availableProducts = getAvailableProducts()
+    if (availableProducts.length === 0) {
+      return 'Ürün bulunamadı'
+    }
+
+    if (selectedProducts.length === 0) {
+      return 'Ürün seçin'
+    }
+    if (selectedProducts.includes('all')) {
+      return `Tüm Ürünler (${availableProducts.length})`
+    }
+    if (selectedProducts.length === 1) {
+      const product = availableProducts.find(product => product.id === selectedProducts[0])
+      return product ? product.name : 'Ürün seçin'
+    }
+    return `${selectedProducts.length} ürün seçildi`
   }
 
 
@@ -428,6 +561,255 @@ export default function ChatboxManagement({ activeTab, themeColors }) {
                 <Copy className="w-4 h-4" />
                 <span>Panoya Kopyala</span>
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* İkinci Kutu - Aynı Özellikler */}
+        <div className="bg-white border-2 rounded-2xl flex flex-col transition-all duration-700 ease-out translate-y-0 scale-100 w-full lg:w-1/2" style={{ borderColor: '#E5E7EB', animationDelay: '300ms' }}>
+          <div className="flex items-center p-4 sm:p-6 lg:p-8 border-b border-gray-200">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl">
+              <span
+                className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
+                style={{
+                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                }}
+              >
+                Mağaza&Ürün
+              </span>
+              <span
+                className="font-normal bg-gradient-to-r bg-clip-text text-transparent"
+                style={{
+                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                }}
+              >
+                Entegrasyonu
+              </span>
+            </h3>
+          </div>
+          <div className="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col">
+            <div className="space-y-4 lg:space-y-6">
+
+              {/* Mağaza Seçimi */}
+              <div>
+                <h4 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">Mağaza Seçimi</h4>
+                <div className="relative" ref={storeDropdownRef}>
+                  <button
+                    onClick={() => setIsStoreDropdownOpen(!isStoreDropdownOpen)}
+                    className="w-full p-3 sm:p-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors bg-white hover:bg-gray-50 text-left flex items-center justify-between"
+                  >
+                    <span className="text-sm sm:text-base text-gray-700">
+                      {getStoreSelectionText()}
+                    </span>
+                    <svg
+                      className={`w-4 h-4 text-gray-500 transform transition-transform duration-200 ${
+                        isStoreDropdownOpen ? 'rotate-180' : ''
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </button>
+
+                  {/* Dropdown Menü */}
+                  {isStoreDropdownOpen && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+
+                      {/* Tüm Mağazalar Seçeneği */}
+                      <div
+                        onClick={() => handleStoreSelection('all')}
+                        className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                      >
+                        <div className="flex items-center justify-center w-4 h-4 mr-3">
+                          {selectedStores.includes('all') && (
+                            <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">Tüm Mağazalar</p>
+                          <p className="text-xs text-gray-500">Tüm mağazalarınızı entegre edin</p>
+                        </div>
+                      </div>
+
+                      {/* Tekil Mağaza Seçenekleri */}
+                      {storeList?.map((store) => (
+                        <div
+                          key={store.id}
+                          onClick={() => handleStoreSelection(store.id)}
+                          className="flex items-center p-3 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <div className="flex items-center justify-center w-4 h-4 mr-3">
+                            {selectedStores.includes(store.id) && (
+                              <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex items-center flex-1">
+                            <img
+                              src={store.logo}
+                              alt={store.name}
+                              className="w-8 h-8 rounded-full mr-3 object-cover border border-gray-200"
+                            />
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{store.name}</p>
+                              <p className="text-xs text-gray-500">{store.platform} • {store.status === 'active' ? 'Aktif' : 'Pasif'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Seçilen Mağazalar Özeti */}
+                {selectedStores.length > 0 && (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                    <p className="text-xs text-gray-600 mb-2">Seçilen mağazalar:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedStores.includes('all') ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          Tüm Mağazalar ({storeList?.length || 0})
+                        </span>
+                      ) : (
+                        selectedStores.map((storeId) => {
+                          const store = storeList?.find(s => s.id === storeId)
+                          return store ? (
+                            <span key={storeId} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              {store.name}
+                            </span>
+                          ) : null
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Ürün Seçimi - Sadece mağaza seçildiyse göster */}
+              {selectedStores.length > 0 && (
+                <div>
+                  <h4 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">Ürün Seçimi</h4>
+                  <div className="relative" ref={productDropdownRef}>
+                    <button
+                      onClick={() => setIsProductDropdownOpen(!isProductDropdownOpen)}
+                      className={`w-full p-3 sm:p-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors bg-white hover:bg-gray-50 text-left flex items-center justify-between ${
+                        selectedStores.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                      disabled={selectedStores.length === 0}
+                    >
+                      <span className="text-sm sm:text-base text-gray-700">
+                        {getProductSelectionText()}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 text-gray-500 transform transition-transform duration-200 ${
+                          isProductDropdownOpen ? 'rotate-180' : ''
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                      </svg>
+                    </button>
+
+                    {/* Ürün Dropdown Menü */}
+                    {isProductDropdownOpen && getAvailableProducts().length > 0 && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+
+                        {/* Tüm Ürünler Seçeneği */}
+                        <div
+                          onClick={() => handleProductSelection('all')}
+                          className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                        >
+                          <div className="flex items-center justify-center w-4 h-4 mr-3">
+                            {selectedProducts.includes('all') && (
+                              <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">Tüm Ürünler</p>
+                            <p className="text-xs text-gray-500">Seçilen mağazaların tüm ürünlerini entegre edin ({getAvailableProducts().length} ürün)</p>
+                          </div>
+                        </div>
+
+                        {/* Tekil Ürün Seçenekleri */}
+                        {getAvailableProducts().map((product) => {
+                          // Bu ürünün hangi mağazaya ait olduğunu bul
+                          const storeId = Object.keys(productList || {}).find(id =>
+                            productList[id]?.some(p => p.id === product.id)
+                          )
+                          const store = storeList?.find(s => s.id === parseInt(storeId))
+
+                          return (
+                            <div
+                              key={product.id}
+                              onClick={() => handleProductSelection(product.id)}
+                              className="flex items-center p-3 hover:bg-gray-50 cursor-pointer"
+                            >
+                              <div className="flex items-center justify-center w-4 h-4 mr-3">
+                                {selectedProducts.includes(product.id) && (
+                                  <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="flex items-center flex-1">
+                                <img
+                                  src={product.image}
+                                  alt={product.name}
+                                  className="w-10 h-10 rounded-lg mr-3 object-cover border border-gray-200"
+                                />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-gray-900">{product.name}</p>
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs text-gray-500">{product.category} • {product.price}</p>
+                                    {store && (
+                                      <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                                        {store.name}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Seçilen Ürünler Özeti */}
+                  {selectedProducts.length > 0 && (
+                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-gray-600 mb-2">Seçilen ürünler:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedProducts.includes('all') ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Tüm Ürünler ({getAvailableProducts().length})
+                          </span>
+                        ) : (
+                          selectedProducts.map((productId) => {
+                            const product = getAvailableProducts().find(p => p.id === productId)
+                            return product ? (
+                              <span key={productId} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                {product.name}
+                              </span>
+                            ) : null
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           </div>
         </div>
