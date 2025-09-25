@@ -4,29 +4,30 @@ import Sidebar from '@/components/Sidebar'
 import HomePage from '@/components/HomePage'
 import ChatboxManagement from '@/components/ChatboxManagement'
 import VirtualStore, { productList } from '@/components/VirtualStore'
+import MessagingRecords from '@/components/MessagingRecords'
 import { Menu, ChevronDown, Plus, MessageSquare } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 
 // Kullanıcının mağaza verileri - ana state olarak taşındı
 const initialStoreList = [
-  { 
-    id: 1, 
-    name: 'TechMall Store', 
+  {
+    id: 1,
+    name: 'TechMall Store',
     logo: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=100&h=100&fit=crop&crop=center',
     status: 'active',
-    platform: 'Trendyol',
-    primaryColor: '#FF6925',
-    secondaryColor: '#FFBF31',
+    platform: 'İKAS',
+    primaryColor: '#DCFB6D',
+    secondaryColor: '#232228',
     textColor: '#FFFFFF'
   },
-  { 
-    id: 2, 
-    name: 'Digital Market', 
+  {
+    id: 2,
+    name: 'Digital Market',
     logo: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=100&h=100&fit=crop&crop=center',
     status: 'inactive',
-    platform: 'Amazon',
-    primaryColor: '#232F3E',
-    secondaryColor: '#FF9900',
+    platform: 'İKAS',
+    primaryColor: '#DCFB6D',
+    secondaryColor: '#232228',
     textColor: '#FFFFFF'
   }
 ]
@@ -50,7 +51,10 @@ export default function Home() {
   
   // Chatbox dropdown state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const [selectedChatbox, setSelectedChatbox] = useState({ name: 'Zzen Chatbox' })
+  const [selectedChatbox, setSelectedChatbox] = useState(() => {
+    // Lazy initialization - chatboxList henüz tanımlanmamış olabilir
+    return null
+  })
   
   // Chatbox tab state
   const [activeTab, setActiveTab] = useState('Önizleme')
@@ -101,11 +105,81 @@ export default function Home() {
     }
   }, [])
   
-  const chatboxList = [
-    { id: 1, name: 'Zzen Chatbox', status: 'active', messages: 1247 },
-    { id: 2, name: 'Imuntus Kids Chatbox', status: 'active', messages: 890 },
-    { id: 3, name: 'Mag4ever Chatbox', status: 'inactive', messages: 456 }
-  ]
+  const [chatboxList, setChatboxList] = useState([
+    {
+      id: 1,
+      name: 'TechMall AI Assistant',
+      status: 'active',
+      messages: 1247,
+      storeId: 1, // TechMall Store
+      colors: {
+        primary: '#DCFB6D',
+        aiMessage: '#F8FFF4',
+        userMessage: '#DCFB6D',
+        borderColor: '#DCFB6D',
+        aiTextColor: '#232228',
+        userTextColor: '#232228',
+        buttonPrimary: '#DCFB6D'
+      },
+      dataSources: ['Teknik ürün katalogları', 'Elektronik rehberleri', 'Garanti bilgileri'],
+      integration: {
+        homepage: true,
+        selectedProducts: [],
+        platform: 'İKAS'
+      }
+    },
+    {
+      id: 2,
+      name: 'Digital Market Bot',
+      status: 'active',
+      messages: 890,
+      storeId: 2, // Digital Market
+      colors: {
+        primary: '#6F55FF',
+        aiMessage: '#F4F3FF',
+        userMessage: '#6F55FF',
+        borderColor: '#6F55FF',
+        aiTextColor: '#232228',
+        userTextColor: '#FFFFFF',
+        buttonPrimary: '#6F55FF'
+      },
+      dataSources: ['Dijital ürün bilgileri', 'Yazılım lisans bilgileri', 'Teknik destek'],
+      integration: {
+        homepage: false,
+        selectedProducts: ['all'], // Tüm ürünler seçili
+        platform: 'İKAS'
+      }
+    },
+    {
+      id: 3,
+      name: 'Premium Support Chat',
+      status: 'active',
+      messages: 456,
+      storeId: 2, // Digital Market
+      colors: {
+        primary: '#232228',
+        aiMessage: '#F9FAFB',
+        userMessage: '#232228',
+        borderColor: '#E5E7EB',
+        aiTextColor: '#374151',
+        userTextColor: '#FFFFFF',
+        buttonPrimary: '#232228'
+      },
+      dataSources: ['Genel müşteri hizmetleri', 'SSS dokümanları', 'İade politikası'],
+      integration: {
+        homepage: true,
+        selectedProducts: [], // Hiç ürün seçilmemiş
+        platform: 'Kendi Web Sitem'
+      }
+    }
+  ])
+
+  // selectedChatbox'ı initialize et
+  useEffect(() => {
+    if (!selectedChatbox && chatboxList.length > 0) {
+      setSelectedChatbox(chatboxList[0])
+    }
+  }, [selectedChatbox])
 
   // Menü öğelerini tanımla (Sidebar ile aynı)
   const menuItems = [
@@ -194,8 +268,8 @@ export default function Home() {
               </h1>
             </div>
             
-            {/* Chatbox Management Controls - başlık Chatbox olduğunda göster */}
-            {pageTitle.bold === 'Chatbox' && (
+            {/* Chatbox Management Controls - başlık Chatbox veya Mesajlaşma olduğunda göster */}
+            {(pageTitle.bold === 'Chatbox' || pageTitle.bold === 'Mesajlaşma') && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 lg:space-x-4 w-full sm:w-auto">
               {/* Chatbox Dropdown */}
               <div className="relative w-full sm:w-auto">
@@ -209,14 +283,14 @@ export default function Home() {
                   onMouseLeave={(e) => e.target.style.borderColor = isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'}
                 >
                   <div className="flex items-center space-x-1 sm:space-x-2 flex-1 min-w-0">
-                    <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: themeColors.primary }} />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedChatbox.name}</span>
+                    <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: selectedChatbox?.colors?.primary || themeColors.primary }} />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedChatbox?.name || 'Chatbox Seçin'}</span>
                   </div>
                   <ChevronDown className={`w-3 sm:w-4 h-3 sm:h-4 text-gray-500 flex-shrink-0 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Dropdown Menu */}
-                {isDropdownOpen && pageTitle.bold === 'Chatbox' && (
+                {isDropdownOpen && (pageTitle.bold === 'Chatbox' || pageTitle.bold === 'Mesajlaşma') && (
                   <div className="absolute left-0 sm:right-0 mt-2 w-full sm:w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
                     {chatboxList.map((chatbox) => (
                       <div
@@ -225,17 +299,45 @@ export default function Home() {
                           setSelectedChatbox(chatbox)
                           setIsDropdownOpen(false)
                         }}
-                        className="flex items-center justify-between p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        className={`flex items-center justify-between p-3 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors ${
+                          selectedChatbox.id === chatbox.id
+                            ? 'bg-gradient-to-r from-gray-50 to-gray-100'
+                            : 'hover:bg-gray-50'
+                        }`}
                       >
                         <div className="flex items-center space-x-2 flex-1 min-w-0">
-                          <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: themeColors.primary }} />
+                          {/* Chatbox'ın kendi renginde icon */}
+                          <MessageSquare
+                            className="w-4 sm:w-5 h-4 sm:h-5 flex-shrink-0"
+                            style={{ color: chatbox.colors?.primary || '#6B7280' }}
+                          />
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{chatbox.name}</p>
+                            <p className="text-xs text-gray-500 truncate">{chatbox.messages} mesaj</p>
                           </div>
                         </div>
-                        <div className="flex items-center flex-shrink-0">
+                        <div className="flex items-center flex-shrink-0 space-x-2">
+                          {/* Renk paleti önizlemesi */}
+                          <div className="flex space-x-1">
+                            <div
+                              className="w-2 h-2 rounded-full border border-gray-200"
+                              style={{ backgroundColor: chatbox.colors?.primary || '#6B7280' }}
+                              title="Primary Color"
+                            ></div>
+                            <div
+                              className="w-2 h-2 rounded-full border border-gray-200"
+                              style={{ backgroundColor: chatbox.colors?.userMessage || '#6B7280' }}
+                              title="User Message Color"
+                            ></div>
+                            <div
+                              className="w-2 h-2 rounded-full border border-gray-200"
+                              style={{ backgroundColor: chatbox.colors?.aiMessage || '#F3F4F6' }}
+                              title="AI Message Color"
+                            ></div>
+                          </div>
+                          {/* Durum göstergesi */}
                           <div className={`w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full ${chatbox.status === 'active' ? 'bg-green-400' : 'bg-gray-400'}`}></div>
-                          <span className={`ml-1 sm:ml-2 text-xs ${chatbox.status === 'active' ? 'text-green-600' : 'text-gray-500'}`}>
+                          <span className={`text-xs ${chatbox.status === 'active' ? 'text-green-600' : 'text-gray-500'}`}>
                             {chatbox.status === 'active' ? 'Aktif' : 'Pasif'}
                           </span>
                         </div>
@@ -245,17 +347,6 @@ export default function Home() {
                 )}
               </div>
 
-              {/* New Chatbox Button */}
-              <button 
-                className="flex items-center justify-center space-x-1 sm:space-x-2 text-white px-2 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg hover:shadow-lg shadow-sm transition-all text-xs sm:text-sm lg:text-base font-medium whitespace-nowrap"
-                style={{ 
-                  background: `linear-gradient(to right, ${themeColors.primary}, ${themeColors.secondary})`
-                }}
-              >
-                <Plus className="w-3 sm:w-4 h-3 sm:h-4" />
-                <span className="hidden sm:inline">Yeni Chatbox</span>
-                <span className="sm:hidden">Yeni</span>
-              </button>
             </div>
             )}
           </div>
@@ -282,15 +373,6 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                {/* Kayma animasyonu için çizgi - responsive genişlik ve pozisyon */}
-                <div 
-                  className="absolute bottom-0 h-0.5 transition-all duration-300 ease-in-out"
-                  style={{
-                    left: `${getUnderlinePosition(activeTabIndex)}px`,
-                    width: `${getUnderlineWidth()}px`,
-                    backgroundColor: themeColors.primary
-                  }}
-                ></div>
               </div>
             </div>
           )}
@@ -316,9 +398,10 @@ export default function Home() {
           {/* Diğer Sayfalar */}
           {showOtherPage && (
             <>
-              {currentPage === 1 && <ChatboxManagement activeTab={activeTab} themeColors={themeColors} storeList={storeList} productList={productList} />}
-              {currentPage === 2 && <VirtualStore themeColors={themeColors} storeList={storeList} setStoreList={setStoreList} />}
-              {currentPage !== 1 && currentPage !== 2 && (
+              {currentPage === 1 && <ChatboxManagement activeTab={activeTab} themeColors={selectedChatbox?.colors || themeColors} storeList={storeList} productList={productList} selectedChatbox={selectedChatbox} chatboxList={chatboxList} setChatboxList={setChatboxList} />}
+              {currentPage === 2 && <VirtualStore themeColors={themeColors} storeList={storeList} setStoreList={setStoreList} chatboxList={chatboxList} />}
+              {currentPage === 3 && <MessagingRecords themeColors={selectedChatbox?.colors || themeColors} chatboxList={chatboxList} selectedChatbox={selectedChatbox} onChatboxSelect={setSelectedChatbox} />}
+              {currentPage !== 1 && currentPage !== 2 && currentPage !== 3 && (
                 <div className="flex items-center justify-center h-96">
                   <div className="text-center text-[#666]">
                     <p>Bu sayfa henüz geliştirilmedi.</p>

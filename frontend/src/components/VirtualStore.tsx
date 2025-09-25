@@ -3,22 +3,19 @@
 import { Store, MoreHorizontal, ArrowLeft, Star, Plus, X, Upload } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { SketchPicker } from 'react-color'
+import ChatboxElements from './ChatboxElements'
 
 // Mağaza verileri artık prop olarak geliyor
 
 // Pazar yeri seçenekleri
 const platformOptions = [
-  'Trendyol',
-  'HepsiBurada',
-  'Amazon',
+  'İKAS',
   'Kendi Web Sitem'
 ]
 
 // Platform renkleri
 const platformColors = {
-  'Trendyol': { primaryColor: '#FF6925', secondaryColor: '#FFBF31', textColor: '#FFFFFF' },
-  'HepsiBurada': { primaryColor: '#FF6000', secondaryColor: '#7723DB', textColor: '#FFFFFF' },
-  'Amazon': { primaryColor: '#232F3E', secondaryColor: '#FF9900', textColor: '#FFFFFF' },
+  'İKAS': { primaryColor: '#DCFB6D', secondaryColor: '#232228', textColor: '#FFFFFF' },
   'Kendi Web Sitem': { primaryColor: '#6434F8', secondaryColor: '#7D56F9', textColor: '#FFFFFF' }
 }
 
@@ -108,7 +105,7 @@ const reviewsList = {
   ]
 }
 
-export default function VirtualStore({ themeColors, storeList, setStoreList }) {
+export default function VirtualStore({ themeColors, storeList, setStoreList, chatboxList }) {
   const [isVisible, setIsVisible] = useState(false)
   const [selectedStore, setSelectedStore] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -159,6 +156,79 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
   // Delete confirmation card state (sağ alt köşe için)
   const [showDeleteCard, setShowDeleteCard] = useState(false)
+
+  // Chatbox states
+  const [isChatboxOpen, setIsChatboxOpen] = useState(false)
+  const [chatMessages, setChatMessages] = useState([])
+  const [currentMessage, setCurrentMessage] = useState('')
+  const [isClient, setIsClient] = useState(false)
+
+  // Chatbox entegrasyon logic
+  const getChatboxForCurrentPage = () => {
+    const boxList = chatboxList || []
+    if (!boxList || !Array.isArray(boxList)) {
+      return null
+    }
+
+    // Store sayfasında mıyız?
+    if (selectedStore && !selectedProduct) {
+      // Store sayfasında uygun chatbox'ları bul
+      const eligibleChatboxes = boxList.filter(cb => {
+        return cb.storeId === selectedStore.id &&
+               cb.integration?.homepage &&
+               cb.status === 'active'
+      })
+
+      // Eğer birden fazla uygun chatbox varsa, öncelik sırasına göre seç
+      if (eligibleChatboxes.length > 0) {
+        // En yüksek mesaj sayısına sahip chatbox'ı seç
+        const selectedChatbox = eligibleChatboxes.reduce((prev, current) =>
+          (current.messages || 0) > (prev.messages || 0) ? current : prev
+        )
+        return selectedChatbox
+      }
+
+      return null
+    }
+
+    // Product sayfasında mıyız?
+    if (selectedProduct && selectedStore) {
+      // Bu ürün için uygun chatbox'ları bul
+      const eligibleChatboxes = boxList.filter(cb => {
+        if (cb.storeId !== selectedStore.id || cb.status !== 'active') return false
+
+        // Tüm ürünler seçilmişse
+        if (cb.integration?.selectedProducts?.includes('all')) return true
+
+        // Bu ürün spesifik olarak seçilmişse
+        if (cb.integration?.selectedProducts?.includes(selectedProduct.id)) return true
+
+        return false
+      })
+
+      // Eğer birden fazla uygun chatbox varsa, öncelik sırasına göre seç
+      if (eligibleChatboxes.length > 0) {
+        // En yüksek mesaj sayısına sahip chatbox'ı seç
+        const selectedChatbox = eligibleChatboxes.reduce((prev, current) =>
+          (current.messages || 0) > (prev.messages || 0) ? current : prev
+        )
+        return selectedChatbox
+      }
+
+      return null
+    }
+
+    return null
+  }
+
+  const activeChatbox = getChatboxForCurrentPage()
+
+
+  // SSR hydration fix
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
   const [storeToDelete, setStoreToDelete] = useState(null)
   const [isCardClosing, setIsCardClosing] = useState(false)
 
@@ -747,6 +817,35 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
             </div>
           </div>
         </div>
+
+        {/* Floating ChatboxElements - Ürün Detay Sayfası için (Küçük Boyut) */}
+        {isClient && activeChatbox && (
+          <div className="fixed bottom-4 right-8 z-1">
+            <div style={{transform: 'scale(0.7)', transformOrigin: 'bottom right'}}>
+              <ChatboxElements
+                chatboxTitle={activeChatbox.name}
+                initialMessage="Hello! It's Orbina here!"
+                colors={{
+                  primary: activeChatbox.colors?.primary,
+                  aiMessage: activeChatbox.colors?.aiMessage,
+                  userMessage: activeChatbox.colors?.userMessage,
+                  borderColor: activeChatbox.colors?.borderColor,
+                  aiTextColor: activeChatbox.colors?.aiTextColor,
+                  userTextColor: activeChatbox.colors?.userTextColor,
+                  buttonPrimary: activeChatbox.colors?.buttonPrimary,
+                  buttonBorderColor: activeChatbox.colors?.buttonBorderColor,
+                  buttonIcon: activeChatbox.colors?.buttonIcon
+                }}
+                isVisible={isChatboxOpen}
+                onToggle={() => setIsChatboxOpen(!isChatboxOpen)}
+                panelZIndex={1}
+                buttonZIndex={50}
+                className=""
+                style={{}}
+              />
+            </div>
+          </div>
+        )}
 
       </div>
     )
@@ -1922,6 +2021,36 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
             </div>
           </div>
         )}
+
+
+      {/* Floating ChatboxElements - Birebir Aynı Chatbox (Küçük Boyut) */}
+      {isClient && activeChatbox && (
+        <div className="fixed bottom-4 right-8 z-1">
+          <div style={{transform: 'scale(0.7)', transformOrigin: 'bottom right'}}>
+            <ChatboxElements
+              chatboxTitle={activeChatbox.name}
+              initialMessage="Hello! It's Orbina here!"
+              colors={{
+                primary: activeChatbox.colors?.primary,
+                aiMessage: activeChatbox.colors?.aiMessage,
+                userMessage: activeChatbox.colors?.userMessage,
+                borderColor: activeChatbox.colors?.borderColor,
+                aiTextColor: activeChatbox.colors?.aiTextColor,
+                userTextColor: activeChatbox.colors?.userTextColor,
+                buttonPrimary: activeChatbox.colors?.buttonPrimary,
+                buttonBorderColor: activeChatbox.colors?.buttonBorderColor,
+                buttonIcon: activeChatbox.colors?.buttonIcon
+              }}
+              isVisible={isChatboxOpen}
+              onToggle={() => setIsChatboxOpen(!isChatboxOpen)}
+              panelZIndex={1}
+              buttonZIndex={50}
+              className=""
+              style={{}}
+            />
+          </div>
+        </div>
+      )}
 
       </div>
     )

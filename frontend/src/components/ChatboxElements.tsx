@@ -21,6 +21,8 @@ interface ChatboxElementsProps {
   className?: string
   style?: React.CSSProperties
   animationClass?: string
+  panelZIndex?: number
+  buttonZIndex?: number
 }
 
 interface Message {
@@ -47,7 +49,9 @@ export default function ChatboxElements({
   onToggle,
   className = '',
   style = {},
-  animationClass = ''
+  animationClass = '',
+  panelZIndex = 1,
+  buttonZIndex = 50
 }: ChatboxElementsProps) {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<Message[]>([
@@ -86,17 +90,19 @@ export default function ChatboxElements({
 
   return (
     <div className={`flex flex-col xl:flex-row xl:items-end gap-4 lg:gap-6 xl:gap-12 ${className} ${animationClass}`} style={style}>
-      {/* Chatbox Dikdörtgen Alanı */}
-      <div 
-        className="bg-white border-2 rounded-2xl flex flex-col w-full max-w-full lg:w-[500px] xl:w-[550px] 2xl:w-[600px] order-1 lg:h-[750px] xl:h-[800px] 2xl:h-[850px] overflow-hidden"
-        style={{ 
-          minHeight: '400px',
-          borderColor: colors.primary,
-          transform: isVisible ? 'translateX(0)' : 'translateX(32px)',
-          opacity: isVisible ? 1 : 0,
-          transition: 'opacity 0.3s ease-out, transform 0.3s ease-out'
-        }}
-      >
+      {/* Chatbox Dikdörtgen Alanı - Gizli */}
+      {isVisible && (
+        <div
+          className="bg-white border-2 rounded-2xl flex flex-col w-full max-w-full lg:w-[500px] xl:w-[550px] 2xl:w-[600px] order-1 lg:h-[750px] xl:h-[800px] 2xl:h-[850px] overflow-hidden relative"
+          style={{
+            minHeight: '400px',
+            borderColor: colors.primary,
+            transform: 'translateX(0)',
+            opacity: 1,
+            transition: 'opacity 0.3s ease-out, transform 0.3s ease-out',
+            zIndex: 50
+          }}
+        >
         {/* Chatbox Header */}
         <div className="flex items-center p-4 sm:p-6 lg:p-8 border-b border-gray-200">
           <h3 className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold text-gray-900">{chatboxTitle}</h3>
@@ -146,18 +152,20 @@ export default function ChatboxElements({
             <span className="text-xs sm:text-sm lg:text-base text-gray-400 ml-1">tarafından geliştirildi</span>
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Toggle Button */}
-      <div className="order-2 flex justify-end xl:block">
+      <div className="order-2 flex justify-end xl:block relative" style={{ zIndex: buttonZIndex }}>
         <button
           onClick={onToggle}
-          className="rounded-full flex items-center justify-center cursor-pointer group shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110"
-          style={{ 
-            width: '100px', 
+          className="rounded-full flex items-center justify-center cursor-pointer group shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 relative"
+          style={{
+            width: '100px',
             height: '100px',
             backgroundColor: colors.buttonPrimary,
-            border: `3px solid ${colors.borderColor}`
+            border: `3px solid ${colors.borderColor}`,
+            zIndex: buttonZIndex
           }}
         >
           <MessageSquare 

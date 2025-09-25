@@ -5,62 +5,252 @@ import { useState, useEffect, useRef } from 'react'
 import ChatboxPrivatization from './ChatboxPrivatization'
 import ChatboxElements from './ChatboxElements'
 
-// Örnek chatbox verileri
+// Örnek chatbox verileri - mağazalar ile eşleştirilmiş
 const chatboxList = [
-  { id: 1, name: 'Zzen Chatbox', status: 'active', messages: 1247 },
-  { id: 2, name: 'Imuntus Kids Chatbox', status: 'active', messages: 890 },
-  { id: 3, name: 'Mag4ever Chatbox', status: 'inactive', messages: 456 }
+  {
+    id: 1,
+    name: 'TechMall AI Assistant',
+    status: 'active',
+    messages: 1247,
+    storeId: 1, // TechMall Store
+    colors: {
+      primary: '#DCFB6D',
+      aiMessage: '#F8FFF4',
+      userMessage: '#DCFB6D',
+      borderColor: '#DCFB6D',
+      aiTextColor: '#232228',
+      userTextColor: '#232228',
+      buttonPrimary: '#DCFB6D',
+      buttonBorderColor: '#DCFB6D',
+      buttonIcon: '#232228'
+    },
+    dataSources: ['Teknik ürün katalogları', 'Elektronik rehberleri', 'Garanti bilgileri'],
+    integration: {
+      homepage: true,
+      selectedProducts: ['all'],
+      platform: 'İKAS'
+    }
+  },
+  {
+    id: 2,
+    name: 'Digital Market Bot',
+    status: 'active',
+    messages: 890,
+    storeId: 2, // Digital Market
+    colors: {
+      primary: '#6F55FF',
+      aiMessage: '#F4F3FF',
+      userMessage: '#6F55FF',
+      borderColor: '#6F55FF',
+      aiTextColor: '#232228',
+      userTextColor: '#FFFFFF',
+      buttonPrimary: '#6F55FF',
+      buttonBorderColor: '#6F55FF',
+      buttonIcon: '#FFFFFF'
+    },
+    dataSources: ['Dijital ürün bilgileri', 'Yazılım lisans bilgileri', 'Teknik destek'],
+    integration: {
+      homepage: false,
+      selectedProducts: ['all'], // Tüm ürünler seçili
+      platform: 'İKAS'
+    }
+  },
+  {
+    id: 3,
+    name: 'Premium Support Chat',
+    status: 'inactive',
+    messages: 456,
+    storeId: 2, // Digital Market
+    colors: {
+      primary: '#232228',
+      aiMessage: '#F9FAFB',
+      userMessage: '#232228',
+      borderColor: '#E5E7EB',
+      aiTextColor: '#374151',
+      userTextColor: '#FFFFFF',
+      buttonPrimary: '#232228',
+      buttonBorderColor: '#E5E7EB',
+      buttonIcon: '#FFFFFF'
+    },
+    dataSources: ['Genel müşteri hizmetleri', 'SSS dokümanları', 'İade politikası'],
+    integration: {
+      homepage: true,
+      selectedProducts: [], // Hiç ürün seçilmemiş
+      platform: 'Kendi Web Sitem'
+    }
+  }
 ]
 
-export default function ChatboxManagement({ activeTab, themeColors, storeList, productList }) {
+export default function ChatboxManagement({ activeTab, themeColors, storeList, productList, selectedChatbox: propSelectedChatbox, chatboxList: propChatboxList, setChatboxList }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const [selectedChatbox, setSelectedChatbox] = useState(chatboxList[0])
+
+  // Prop'tan gelen chatboxList'i kullan, yoksa local'ı kullan
+  const activeChatboxList = propChatboxList || chatboxList
+
+  // Default renk paleti - hata durumunda kullanılır
+  const defaultColors = {
+    primary: '#7B4DFA',
+    aiMessage: '#E5E7EB',
+    userMessage: '#7B4DFA',
+    borderColor: '#B794F6',
+    aiTextColor: '#1F2937',
+    userTextColor: '#FFFFFF',
+    buttonPrimary: '#7B4DFA',
+    buttonBorderColor: '#B794F6',
+    buttonIcon: '#FFFFFF'
+  }
+
+  // PropSelectedChatbox varsa onu kullan, yoksa activeChatboxList'den ilkini kullan
+  const [selectedChatbox, setSelectedChatbox] = useState(propSelectedChatbox || (activeChatboxList && activeChatboxList[0]))
   const [isChatboxVisible, setIsChatboxVisible] = useState(true)
-  const [colors, setColors] = useState({
-    primary: '#7B4DFA',
-    aiMessage: '#E5E7EB',
-    userMessage: '#7B4DFA',
-    borderColor: '#B794F6',
-    aiTextColor: '#1F2937',
-    userTextColor: '#FFFFFF',
-    buttonPrimary: '#7B4DFA'
-  })
-  const [tempColors, setTempColors] = useState({
-    primary: '#7B4DFA',
-    aiMessage: '#E5E7EB',
-    userMessage: '#7B4DFA',
-    borderColor: '#B794F6',
-    aiTextColor: '#1F2937',
-    userTextColor: '#FFFFFF',
-    buttonPrimary: '#7B4DFA'
-  })
+  const [colors, setColors] = useState((propSelectedChatbox?.colors || activeChatboxList[0]?.colors || defaultColors))
+  const [tempColors, setTempColors] = useState((propSelectedChatbox?.colors || activeChatboxList[0]?.colors || defaultColors))
+
+  // PropSelectedChatbox değişirse local state'i güncelle
+  useEffect(() => {
+    if (propSelectedChatbox) {
+      setSelectedChatbox(propSelectedChatbox)
+
+      // Renkleri güncelle
+      if (propSelectedChatbox.colors) {
+        setColors(propSelectedChatbox.colors)
+        setTempColors(propSelectedChatbox.colors)
+        setHasColorChanges(false)
+      }
+
+      // Veri kaynağı metnini güncelle
+      const newText = getDataSourceText(propSelectedChatbox)
+      setOriginalText(newText)
+      setCurrentText(newText)
+      setHasTextChanges(false)
+
+      // PDF durumlarını güncelle
+      setPdfStatuses(getPdfStatuses(propSelectedChatbox))
+
+      // Entegrasyon ayarlarını güncelle
+      if (propSelectedChatbox.storeId) {
+        setSelectedStores([propSelectedChatbox.storeId])
+        setSelectedProducts(propSelectedChatbox.integration?.selectedProducts || [])
+      } else {
+        setSelectedStores([])
+        setSelectedProducts([])
+      }
+
+      // Anasayfa ayarını güncelle
+      if (propSelectedChatbox.storeId && propSelectedChatbox.integration?.homepage !== undefined) {
+        setStoreHomepageSettings({
+          [propSelectedChatbox.storeId]: propSelectedChatbox.integration.homepage
+        })
+      }
+    }
+  }, [propSelectedChatbox])
   const [hasColorChanges, setHasColorChanges] = useState(false)
   
-  // Veri kaynağı metni state'leri
-  const [originalText, setOriginalText] = useState("Bu chatbox, yapay zeka destekli müşteri hizmetleri sağlar ve kullanıcı sorularını otomatik olarak yanıtlar. Modern teknoloji ile donatılmış bu")
-  const [currentText, setCurrentText] = useState("Bu chatbox, yapay zeka destekli müşteri hizmetleri sağlar ve kullanıcı sorularını otomatik olarak yanıtlar. Modern teknoloji ile donatılmış bu")
+  // Veri kaynağı metni state'leri - chatbox'a göre dinamik
+  const getDataSourceText = (chatbox) => {
+    if (!chatbox?.dataSources) {
+      return 'Genel müşteri hizmetleri konularında uzmanlaşmış yapay zeka asistanıdır.'
+    }
+    return chatbox.dataSources.join(', ') + ' konularında uzmanlaşmış yapay zeka asistanıdır.'
+  }
+  const [originalText, setOriginalText] = useState(getDataSourceText(propSelectedChatbox || chatboxList[0]))
+  const [currentText, setCurrentText] = useState(getDataSourceText(propSelectedChatbox || chatboxList[0]))
   const [hasTextChanges, setHasTextChanges] = useState(false)
   
-  // PDF'lerin durumu ve dropdown state'leri
-  const [pdfStatuses, setPdfStatuses] = useState({
-    'urun_katalog.pdf': 'aktif',
-    'sss_dokuman.pdf': 'aktif', 
-    'kullanim_kilavuzu.pdf': 'aktif'
-  })
+  // PDF'lerin durumu ve dropdown state'leri - chatbox'a göre dinamik
+  const getPdfStatuses = (chatbox) => {
+    if (!chatbox?.id) {
+      return {
+        'urun_katalog.pdf': 'aktif',
+        'sss_dokuman.pdf': 'aktif',
+        'kullanim_kilavuzu.pdf': 'aktif'
+      }
+    }
+
+    if (chatbox.id === 1) {
+      return {
+        'teknik_katalog.pdf': 'aktif',
+        'elektronik_rehberi.pdf': 'aktif',
+        'garanti_dokumani.pdf': 'aktif'
+      }
+    } else if (chatbox.id === 2) {
+      return {
+        'dijital_urunler.pdf': 'aktif',
+        'yazilim_lisanslari.pdf': 'pasif',
+        'teknik_destek.pdf': 'aktif'
+      }
+    } else {
+      return {
+        'musteri_hizmetleri.pdf': 'aktif',
+        'sss_dokumanlari.pdf': 'aktif',
+        'iade_politikasi.pdf': 'pasif'
+      }
+    }
+  }
+  const [pdfStatuses, setPdfStatuses] = useState(getPdfStatuses(propSelectedChatbox || chatboxList[0]))
   const [openDropdowns, setOpenDropdowns] = useState({})
   
   // Animasyon state'leri
   const [isVisible, setIsVisible] = useState(false)
 
-  // Mağaza seçimi state'leri
-  const [selectedStores, setSelectedStores] = useState([])
+  // Mağaza seçimi state'leri - chatbox'a göre initialize
+  const getInitialStoreSelection = (chatbox) => {
+    if (!chatbox?.storeId) return []
+    return [chatbox.storeId]
+  }
+  const [selectedStores, setSelectedStores] = useState(getInitialStoreSelection(propSelectedChatbox || chatboxList[0]))
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false)
   const storeDropdownRef = useRef(null)
 
-  // Ürün seçimi state'leri
-  const [selectedProducts, setSelectedProducts] = useState([])
+  const getInitialHomepageSettings = (chatbox) => {
+    if (!chatbox?.storeId || !chatbox?.integration) return {}
+    return { [chatbox.storeId]: chatbox.integration.homepage || false }
+  }
+  const [storeHomepageSettings, setStoreHomepageSettings] = useState(getInitialHomepageSettings(propSelectedChatbox || chatboxList[0]))
+
+  // Ürün seçimi state'leri - chatbox'a göre initialize
+  const getInitialProductSelection = (chatbox) => {
+    if (!chatbox?.integration) return []
+    return chatbox.integration.selectedProducts || []
+  }
+  const [selectedProducts, setSelectedProducts] = useState(getInitialProductSelection(propSelectedChatbox || chatboxList[0]))
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false)
   const productDropdownRef = useRef(null)
+
+  // Chatbox entegrasyon ayarlarını güncelleme fonksiyonu
+  const updateChatboxIntegration = (chatboxId, updates) => {
+    if (setChatboxList && activeChatboxList) {
+      const updatedList = activeChatboxList.map(chatbox => {
+        if (chatbox.id === chatboxId) {
+          return {
+            ...chatbox,
+            integration: {
+              ...chatbox.integration,
+              ...updates
+            }
+          }
+        }
+        return chatbox
+      })
+      setChatboxList(updatedList)
+
+      // Çakışma kontrolü - aynı mağaza için birden fazla chatbox aynı ayarlara sahipse uyarı göster
+      const currentChatbox = updatedList.find(cb => cb.id === chatboxId)
+      if (currentChatbox) {
+        const conflictingChatboxes = updatedList.filter(cb =>
+          cb.id !== chatboxId &&
+          cb.storeId === currentChatbox.storeId &&
+          cb.status === 'active' &&
+          cb.integration?.homepage === currentChatbox.integration?.homepage &&
+          JSON.stringify(cb.integration?.selectedProducts) === JSON.stringify(currentChatbox.integration?.selectedProducts)
+        )
+
+        if (conflictingChatboxes.length > 0) {
+          console.warn('Çakışma tespit edildi: Aynı mağaza için birden fazla chatbox aynı sayfalarda görüntülenecek. En yüksek mesaj sayısına sahip chatbox öncelikli olacak.')
+        }
+      }
+    }
+  }
 
   // Sayfa yüklendiğinde ve sekme değiştiğinde animasyonu başlat
   useEffect(() => {
@@ -125,8 +315,42 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
   }
 
   const handleChatboxSelect = (chatbox) => {
+    if (!chatbox) return
+
     setSelectedChatbox(chatbox)
     setIsDropdownOpen(false)
+
+    // Seçilen chatbox'ın renklerini uygula
+    if (chatbox.colors) {
+      setColors(chatbox.colors)
+      setTempColors(chatbox.colors)
+      setHasColorChanges(false)
+    }
+
+    // Entegrasyon ayarlarını güncelle
+    if (chatbox.storeId) {
+      setSelectedStores([chatbox.storeId])
+      setSelectedProducts(chatbox.integration?.selectedProducts || [])
+    } else {
+      setSelectedStores([])
+      setSelectedProducts([])
+    }
+
+    // Anasayfa ayarını güncelle
+    if (chatbox.storeId && chatbox.integration?.homepage !== undefined) {
+      setStoreHomepageSettings({
+        [chatbox.storeId]: chatbox.integration.homepage
+      })
+    }
+
+    // Veri kaynağı metnini güncelle
+    const newText = getDataSourceText(chatbox)
+    setOriginalText(newText)
+    setCurrentText(newText)
+    setHasTextChanges(false)
+
+    // PDF durumlarını güncelle
+    setPdfStatuses(getPdfStatuses(chatbox))
   }
 
   const handleToggleChatbox = () => {
@@ -188,27 +412,68 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
     }))
   }
 
+  // Mağaza anasayfa görünürlük ayarları fonksiyonu
+  const handleStoreHomepageToggle = (storeId) => {
+    const newHomepageValue = !storeHomepageSettings[storeId]
+    setStoreHomepageSettings(prev => ({
+      ...prev,
+      [storeId]: newHomepageValue
+    }))
+
+    // Chatbox entegrasyonunu güncelle
+    if (selectedChatbox && selectedChatbox.storeId === storeId) {
+      updateChatboxIntegration(selectedChatbox.id, {
+        homepage: newHomepageValue
+      })
+    }
+  }
+
   // Mağaza seçimi fonksiyonları
   const handleStoreSelection = (storeId) => {
     if (storeId === 'all') {
       // Tüm mağazalar seçildi
       if (selectedStores.includes('all')) {
         setSelectedStores([]) // Tüm seçimi kaldır
+        setStoreHomepageSettings({}) // Anasayfa ayarlarını temizle
       } else {
         setSelectedStores(['all']) // Sadece tüm mağazalar seç
+        // Tüm mağazalar için anasayfa ayarını false yap
+        const allStoreSettings = {}
+        storeList?.forEach(store => {
+          allStoreSettings[store.id] = false
+        })
+        setStoreHomepageSettings(allStoreSettings)
       }
     } else {
       // Tekil mağaza seçimi
       if (selectedStores.includes('all')) {
         // Eğer "tüm mağazalar" seçiliyse, onu kaldır ve bu mağazayı ekle
         setSelectedStores([storeId])
+        setStoreHomepageSettings({ [storeId]: false })
       } else {
         // Normal çoklu seçim
-        setSelectedStores(prev =>
-          prev.includes(storeId)
+        setSelectedStores(prev => {
+          const newSelection = prev.includes(storeId)
             ? prev.filter(id => id !== storeId)
             : [...prev, storeId]
-        )
+
+          // Mağaza seçimi kaldırıldıysa ayarını da kaldır
+          if (prev.includes(storeId)) {
+            setStoreHomepageSettings(prevSettings => {
+              const newSettings = { ...prevSettings }
+              delete newSettings[storeId]
+              return newSettings
+            })
+          } else {
+            // Yeni mağaza eklendiyse default false ayarı ekle
+            setStoreHomepageSettings(prevSettings => ({
+              ...prevSettings,
+              [storeId]: false
+            }))
+          }
+
+          return newSelection
+        })
       }
     }
   }
@@ -248,26 +513,35 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
 
   // Ürün seçimi fonksiyonları
   const handleProductSelection = (productId) => {
+    let newSelectedProducts = []
+
     if (productId === 'all') {
       const availableProducts = getAvailableProducts()
       if (selectedProducts.includes('all')) {
-        setSelectedProducts([]) // Tüm seçimi kaldır
+        newSelectedProducts = [] // Tüm seçimi kaldır
       } else {
-        setSelectedProducts(['all']) // Sadece tüm ürünler seç
+        newSelectedProducts = ['all'] // Sadece tüm ürünler seç
       }
     } else {
       // Tekil ürün seçimi
       if (selectedProducts.includes('all')) {
         // Eğer "tüm ürünler" seçiliyse, onu kaldır ve bu ürünü ekle
-        setSelectedProducts([productId])
+        newSelectedProducts = [productId]
       } else {
         // Normal çoklu seçim
-        setSelectedProducts(prev =>
-          prev.includes(productId)
-            ? prev.filter(id => id !== productId)
-            : [...prev, productId]
-        )
+        newSelectedProducts = selectedProducts.includes(productId)
+          ? selectedProducts.filter(id => id !== productId) // Zaten seçiliyse kaldır
+          : [...selectedProducts, productId] // Seçilmemişse ekle
       }
+    }
+
+    setSelectedProducts(newSelectedProducts)
+
+    // Chatbox entegrasyonunu güncelle
+    if (selectedChatbox) {
+      updateChatboxIntegration(selectedChatbox.id, {
+        selectedProducts: newSelectedProducts
+      })
     }
   }
 
@@ -297,7 +571,23 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
 
   // Sekme kontrolü
   if (activeTab === 'Özelleştirme') {
-    return <ChatboxPrivatization themeColors={themeColors} />
+    return <ChatboxPrivatization
+      themeColors={colors}
+      selectedChatbox={selectedChatbox}
+      colors={colors}
+      setColors={setColors}
+      tempColors={tempColors}
+      setTempColors={setTempColors}
+      hasColorChanges={hasColorChanges}
+      setHasColorChanges={setHasColorChanges}
+      handleColorChange={(colorType, newColor) => {
+        setTempColors(prev => ({
+          ...prev,
+          [colorType]: newColor
+        }))
+        setHasColorChanges(true)
+      }}
+    />
   }
   
   if (activeTab === 'Veri Kaynakları') {
@@ -307,18 +597,18 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
         <div className="bg-white border-2 rounded-2xl flex flex-col flex-1 transition-all duration-700 ease-out translate-y-0 scale-100 h-[500px] sm:h-[600px] md:h-[700px] lg:h-[850px]" style={{ borderColor: '#E5E7EB', animationDelay: '0ms' }}>
           <div className="flex items-center p-4 sm:p-6 lg:p-8 border-b border-gray-200">
             <h3 className="text-xl sm:text-2xl lg:text-3xl">
-              <span 
+              <span
                 className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
-                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                  backgroundImage: `linear-gradient(135deg, ${colors.primary}, ${colors.userMessage})`
                 }}
               >
                 Veri Kaynağı
-              </span> 
-              <span 
+              </span>
+              <span
                 className="font-normal bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
-                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                  backgroundImage: `linear-gradient(135deg, ${colors.primary}, ${colors.userMessage})`
                 }}
               >
                 Önizleme
@@ -374,12 +664,12 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
               <div 
                 className="border-2 border-dashed border-gray-300 rounded-lg p-4 sm:p-6 text-center transition-all duration-300 cursor-pointer"
                 style={{
-                  '--hover-border': themeColors.primary,
-                  '--hover-bg': `${themeColors.primary}08`
+                  '--hover-border': colors.primary,
+                  '--hover-bg': `${colors.primary}08`
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = themeColors.primary;
-                  e.currentTarget.style.backgroundColor = `${themeColors.primary}08`;
+                  e.currentTarget.style.borderColor = colors.primary;
+                  e.currentTarget.style.backgroundColor = `${colors.primary}08`;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.borderColor = '#d1d5db';
@@ -492,18 +782,18 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
         <div className="bg-white border-2 rounded-2xl flex flex-col transition-all duration-700 ease-out translate-y-0 scale-100 w-full lg:w-1/2" style={{ borderColor: '#E5E7EB', animationDelay: '150ms' }}>
           <div className="flex items-center p-4 sm:p-6 lg:p-8 border-b border-gray-200">
             <h3 className="text-xl sm:text-2xl lg:text-3xl">
-              <span 
+              <span
                 className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
-                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                  backgroundImage: `linear-gradient(135deg, ${colors.primary}, ${colors.userMessage})`
                 }}
               >
                 Chatbox
-              </span> 
-              <span 
+              </span>
+              <span
                 className="font-normal bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
-                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                  backgroundImage: `linear-gradient(135deg, ${colors.primary}, ${colors.userMessage})`
                 }}
               >
                 Entegrasyonu
@@ -572,7 +862,7 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
               <span
                 className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
-                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                  backgroundImage: `linear-gradient(135deg, ${colors.primary}, ${colors.userMessage})`
                 }}
               >
                 Mağaza&Ürün
@@ -580,7 +870,7 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
               <span
                 className="font-normal bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
-                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                  backgroundImage: `linear-gradient(135deg, ${colors.primary}, ${colors.userMessage})`
                 }}
               >
                 Entegrasyonu
@@ -685,6 +975,122 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
                           ) : null
                         })
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mağaza Anasayfa Görünürlük Ayarları */}
+                {selectedStores.length > 0 && !selectedStores.includes('all') && (
+                  <div className="mt-4">
+                    <h5 className="text-sm font-semibold text-gray-900 mb-3">Mağaza Anasayfa Görünürlük Ayarları</h5>
+                    <p className="text-xs text-gray-500 mb-3">Chatbox'ın hangi mağazaların anasayfasında görüneceğini belirleyin</p>
+
+                    <div className="space-y-3">
+                      {selectedStores.map((storeId) => {
+                        const store = storeList?.find(s => s.id === storeId)
+                        if (!store) return null
+
+                        return (
+                          <div key={storeId} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            <div className="flex items-center flex-1">
+                              <img
+                                src={store.logo}
+                                alt={store.name}
+                                className="w-8 h-8 rounded-full mr-3 object-cover border border-gray-200"
+                              />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{store.name}</p>
+                                <p className="text-xs text-gray-500">{store.platform}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-3">
+                              <span className="text-xs text-gray-600">
+                                {storeHomepageSettings[storeId] ? 'Anasayfada Görünür' : 'Sadece Ürün Sayfalarında'}
+                              </span>
+
+                              <button
+                                onClick={() => handleStoreHomepageToggle(storeId)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                  storeHomepageSettings[storeId]
+                                    ? `focus:ring-[${themeColors.primary}]`
+                                    : 'focus:ring-gray-500'
+                                }`}
+                                style={{
+                                  backgroundColor: storeHomepageSettings[storeId]
+                                    ? themeColors.primary
+                                    : '#D1D5DB'
+                                }}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    storeHomepageSettings[storeId] ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Açıklama Metni */}
+                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-start space-x-2">
+                        <svg className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <p className="text-xs text-blue-700 font-medium mb-1">Görünürlük Ayarları</p>
+                          <p className="text-xs text-blue-600">
+                            <strong>Açık:</strong> Chatbox hem mağaza anasayfasında hem de seçilen ürün sayfalarında görünür<br/>
+                            <strong>Kapalı:</strong> Chatbox sadece seçilen ürün sayfalarında görünür
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tüm Mağazalar Seçiliyse Genel Anasayfa Ayarı */}
+                {selectedStores.includes('all') && (
+                  <div className="mt-4">
+                    <h5 className="text-sm font-semibold text-gray-900 mb-3">Genel Anasayfa Görünürlük Ayarı</h5>
+
+                    <div className="p-4 bg-white border border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Tüm Mağaza Anasayfalarında Görünür</p>
+                          <p className="text-xs text-gray-500 mt-1">Chatbox tüm mağazaların anasayfasında ve ürün sayfalarında görünür</p>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            const newValue = !Object.values(storeHomepageSettings).every(val => val)
+                            const allStoreSettings = {}
+                            storeList?.forEach(store => {
+                              allStoreSettings[store.id] = newValue
+                            })
+                            setStoreHomepageSettings(allStoreSettings)
+                          }}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                            Object.values(storeHomepageSettings).every(val => val)
+                              ? `focus:ring-[${themeColors.primary}]`
+                              : 'focus:ring-gray-500'
+                          }`}
+                          style={{
+                            backgroundColor: Object.values(storeHomepageSettings).every(val => val)
+                              ? themeColors.primary
+                              : '#D1D5DB'
+                          }}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              Object.values(storeHomepageSettings).every(val => val) ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -886,10 +1292,10 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
             {/* Chatbox Tema */}
             <div>
               <h4 className="text-base sm:text-lg font-bold text-gray-900 mb-2 sm:mb-3">Chatbox Tema</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
                 {/* Ana Renk */}
                 <div className="flex flex-col space-y-1.5">
-                  <p className="text-xs sm:text-sm text-gray-700">Ana Renk:</p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">Ana Renk:</p>
                   <div className="flex items-center space-x-2 bg-white rounded-lg shadow-sm p-1.5 sm:p-2 border border-gray-100">
                     <div className="w-5 sm:w-6 h-5 sm:h-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-md flex items-center justify-center text-xs border border-gray-200">
                       🎨
@@ -902,7 +1308,7 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
 
                 {/* AI Mesaj Rengi */}
                 <div className="flex flex-col space-y-1.5">
-                  <p className="text-xs sm:text-sm text-gray-700">AI Mesaj Rengi:</p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">AI Mesaj:</p>
                   <div className="flex items-center space-x-2 bg-white rounded-lg shadow-sm p-1.5 sm:p-2 border border-gray-100">
                     <div className="w-5 sm:w-6 h-5 sm:h-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-md flex items-center justify-center text-xs border border-gray-200">
                       🤖
@@ -915,7 +1321,7 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
 
                 {/* Kullanıcı Mesaj Rengi */}
                 <div className="flex flex-col space-y-1.5">
-                  <p className="text-xs sm:text-sm text-gray-700">Kullanıcı Mesaj Rengi:</p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">Kullanıcı:</p>
                   <div className="flex items-center space-x-2 bg-white rounded-lg shadow-sm p-1.5 sm:p-2 border border-gray-100">
                     <div className="w-5 sm:w-6 h-5 sm:h-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-md flex items-center justify-center text-xs border border-gray-200">
                       👤
@@ -953,12 +1359,12 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
               <div>
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 sm:p-3 relative overflow-hidden">
                   <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-                    Bu chatbox, yapay zeka destekli müşteri hizmetleri sağlar ve kullanıcı sorularını otomatik olarak yanıtlar. Modern teknoloji ile donatılmış bu
+                    {currentText.length > 150 ? `${currentText.substring(0, 150)}...` : currentText}
                   </p>
                   <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-gray-50 to-transparent pointer-events-none"></div>
                 </div>
                 <div className="text-right mt-1.5">
-                  <span className="text-xs text-green-500 font-medium">899/1000 karakter</span>
+                  <span className="text-xs text-green-500 font-medium">{currentText.length}/1000 karakter</span>
                 </div>
               </div>
             </div>
@@ -966,10 +1372,10 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
             {/* Chatbox Butonu */}
             <div>
               <h4 className="text-base sm:text-lg font-bold text-gray-900 mb-2 sm:mb-3">Chatbox Butonu</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
                 {/* Ana Renk */}
                 <div className="flex flex-col space-y-1.5">
-                  <p className="text-xs sm:text-sm text-gray-700">Ana Renk:</p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">Ana Renk:</p>
                   <div className="flex items-center space-x-2 bg-white rounded-lg shadow-sm p-1.5 sm:p-2 border border-gray-100">
                     <div className="w-5 sm:w-6 h-5 sm:h-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-md flex items-center justify-center text-xs border border-gray-200">
                       🎨
@@ -982,7 +1388,7 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
 
                 {/* Çerçeve Rengi */}
                 <div className="flex flex-col space-y-1.5">
-                  <p className="text-xs sm:text-sm text-gray-700">Çerçeve Rengi:</p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">Çerçeve:</p>
                   <div className="flex items-center space-x-2 bg-white rounded-lg shadow-sm p-1.5 sm:p-2 border border-gray-100">
                     <div className="w-5 sm:w-6 h-5 sm:h-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-md flex items-center justify-center text-xs border border-gray-200">
                       🔘
@@ -995,7 +1401,7 @@ export default function ChatboxManagement({ activeTab, themeColors, storeList, p
 
                 {/* Kullanılan İcon */}
                 <div className="flex flex-col space-y-1.5">
-                  <p className="text-xs sm:text-sm text-gray-700">Kullanılan İcon:</p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">İcon:</p>
                   <div className="flex items-center space-x-2 bg-white rounded-lg shadow-sm p-1.5 sm:p-2 border border-gray-100">
                     <div className="w-5 sm:w-6 h-5 sm:h-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-md flex items-center justify-center text-xs border border-gray-200">
                       <MessageSquare className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-gray-800" strokeWidth={1.2} />

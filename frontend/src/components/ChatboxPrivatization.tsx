@@ -12,15 +12,25 @@ const chatboxList = [
   { id: 3, name: 'Mag4ever Chatbox', status: 'inactive', messages: 456 }
 ]
 
-export default function ChatboxPrivatization({ themeColors }) {
+export default function ChatboxPrivatization({
+  themeColors,
+  selectedChatbox: propSelectedChatbox,
+  colors: propColors,
+  setColors,
+  tempColors,
+  setTempColors,
+  hasColorChanges,
+  setHasColorChanges,
+  handleColorChange
+}) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const [selectedChatbox, setSelectedChatbox] = useState(chatboxList[0])
+  const [selectedChatbox, setSelectedChatbox] = useState(propSelectedChatbox || chatboxList[0])
   const [isChatboxVisible, setIsChatboxVisible] = useState(true)
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState([
     { id: 1, text: 'Hello! It\'s Orbina here!', sender: 'bot', timestamp: new Date() }
   ])
-  const [colors, setColors] = useState({
+  const [colors, setColorsLocal] = useState(propColors || {
     primary: '#7B4DFA',
     aiMessage: '#E5E7EB',
     userMessage: '#7B4DFA',
@@ -31,7 +41,7 @@ export default function ChatboxPrivatization({ themeColors }) {
     buttonBorderColor: '#B794F6',
     buttonIcon: '#FFFFFF'
   })
-  const [tempColors, setTempColors] = useState({
+  const [tempColorsLocal, setTempColorsLocal] = useState(tempColors || propColors || {
     primary: '#7B4DFA',
     aiMessage: '#E5E7EB',
     userMessage: '#7B4DFA',
@@ -42,11 +52,26 @@ export default function ChatboxPrivatization({ themeColors }) {
     buttonBorderColor: '#B794F6',
     buttonIcon: '#FFFFFF'
   })
-  
+
+  // Props değiştiğinde local state'leri güncelle
+  useEffect(() => {
+    if (propSelectedChatbox) {
+      setSelectedChatbox(propSelectedChatbox)
+      setChatboxTitle(propSelectedChatbox.name || 'Chatbox')
+      setTempChatboxTitle(propSelectedChatbox.name || 'Chatbox')
+    }
+    if (propColors) {
+      setColorsLocal(propColors)
+    }
+    if (tempColors) {
+      setTempColorsLocal(tempColors)
+    }
+  }, [propSelectedChatbox, propColors, tempColors])
+
   // Başlık state'leri
-  const [chatboxTitle, setChatboxTitle] = useState('Zzen Chatbox')
+  const [chatboxTitle, setChatboxTitle] = useState(propSelectedChatbox?.name || 'Zzen Chatbox')
   const [chatboxInitialMessage, setChatboxInitialMessage] = useState("Hello! It's Orbina here!")
-  const [tempChatboxTitle, setTempChatboxTitle] = useState('Zzen Chatbox')
+  const [tempChatboxTitle, setTempChatboxTitle] = useState(propSelectedChatbox?.name || 'Zzen Chatbox')
   const [tempChatboxInitialMessage, setTempChatboxInitialMessage] = useState("Hello! It's Orbina here!")
   
   
@@ -166,12 +191,21 @@ export default function ChatboxPrivatization({ themeColors }) {
     }
   }
 
-  const handleColorChange = (colorType, newColor) => {
-    setTempColors(prev => ({
-      ...prev,
-      [colorType]: newColor
-    }))
+  const handleColorChangeLocal = (colorType, newColor) => {
+    // Eğer parent'tan handleColorChange gelirse onu kullan
+    if (handleColorChange) {
+      handleColorChange(colorType, newColor)
+    } else {
+      // Yoksa local state'i güncelle
+      setTempColorsLocal(prev => ({
+        ...prev,
+        [colorType]: newColor
+      }))
+    }
     setHasChanges(true)
+    if (setHasColorChanges) {
+      setHasColorChanges(true)
+    }
   }
 
   const handleTitleChange = (value) => {
@@ -186,21 +220,36 @@ export default function ChatboxPrivatization({ themeColors }) {
 
 
   const applyChanges = () => {
-    setColors(tempColors)
+    if (setColors) {
+      setColors(tempColors || tempColorsLocal)
+    } else {
+      setColorsLocal(tempColors || tempColorsLocal)
+    }
     setChatboxTitle(tempChatboxTitle)
     setChatboxInitialMessage(tempChatboxInitialMessage)
     setHasChanges(false)
+    if (setHasColorChanges) {
+      setHasColorChanges(false)
+    }
   }
 
   const resetChanges = () => {
-    setTempColors(colors)
+    const currentColors = propColors || colors
+    if (setTempColors) {
+      setTempColors(currentColors)
+    } else {
+      setTempColorsLocal(currentColors)
+    }
     setTempChatboxTitle(chatboxTitle)
     setTempChatboxInitialMessage(chatboxInitialMessage)
     setHasChanges(false)
+    if (setHasColorChanges) {
+      setHasColorChanges(false)
+    }
   }
 
   const handleColorPickerChange = (colorType, colorResult) => {
-    handleColorChange(colorType, colorResult.hex)
+    handleColorChangeLocal(colorType, colorResult.hex)
   }
 
   const toggleColorPicker = (colorType) => {
@@ -218,14 +267,14 @@ export default function ChatboxPrivatization({ themeColors }) {
           chatboxTitle={tempChatboxTitle}
           initialMessage={tempChatboxInitialMessage}
           colors={{
-            primary: tempColors.primary,
-            aiMessage: tempColors.aiMessage,
-            userMessage: tempColors.userMessage,
-            borderColor: tempColors.buttonBorderColor || tempColors.borderColor,
-            aiTextColor: tempColors.aiTextColor,
-            userTextColor: tempColors.userTextColor,
-            buttonPrimary: tempColors.buttonPrimary,
-            buttonIcon: tempColors.buttonIcon
+            primary: (tempColors || tempColorsLocal).primary,
+            aiMessage: (tempColors || tempColorsLocal).aiMessage,
+            userMessage: (tempColors || tempColorsLocal).userMessage,
+            borderColor: (tempColors || tempColorsLocal).buttonBorderColor || (tempColors || tempColorsLocal).borderColor,
+            aiTextColor: (tempColors || tempColorsLocal).aiTextColor,
+            userTextColor: (tempColors || tempColorsLocal).userTextColor,
+            buttonPrimary: (tempColors || tempColorsLocal).buttonPrimary,
+            buttonIcon: (tempColors || tempColorsLocal).buttonIcon
           }}
           isVisible={isChatboxVisible}
           onToggle={handleToggleChatbox}
@@ -247,24 +296,9 @@ export default function ChatboxPrivatization({ themeColors }) {
           }}
         >
           {/* Özellikler Header */}
-          <div className="flex items-center p-3 sm:p-4 lg:p-6 xl:p-8 border-b border-gray-200">
-            <h3 className="text-lg sm:text-xl lg:text-2xl xl:text-3xl">
-              <span 
-                className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
-                style={{
-                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
-                }}
-              >
-                Chatbox
-              </span> 
-              <span 
-                className="font-normal bg-gradient-to-r bg-clip-text text-transparent"
-                style={{
-                  backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
-                }}
-              >
-                Özelleştirme
-              </span>
+          <div className="flex items-center p-3 sm:p-4 lg:p-6 border-b border-gray-200">
+            <h3 className="text-lg sm:text-xl lg:text-2xl text-gray-900">
+              <span className="font-bold">Chatbox</span> <span className="font-normal">Özelleştirme</span>
             </h3>
           </div>
           
@@ -275,7 +309,7 @@ export default function ChatboxPrivatization({ themeColors }) {
             {/* Chatbox Başlık */}
             <div>
               <h4 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 mb-2 sm:mb-3 lg:mb-4">Chatbox</h4>
-              <div className="flex flex-col sm:flex-col lg:flex-row gap-2 sm:gap-3 lg:gap-4 xl:gap-8">
+              <div className="flex flex-col gap-2 sm:gap-3 lg:gap-4">
                 <div className="flex flex-col sm:flex-col lg:flex-row lg:items-center gap-1 sm:gap-2">
                   <p className="text-xs sm:text-sm lg:text-base text-gray-700 whitespace-nowrap">Chatbox Başlık İsmi:</p>
                   <input
@@ -313,16 +347,16 @@ export default function ChatboxPrivatization({ themeColors }) {
                       🎨
                     </div>
                     <div className="relative flex-1 h-5 sm:h-6 md:h-6 lg:h-7 xl:h-8">
-                      <div 
+                      <div
                         className="w-full h-full rounded-md md:rounded-lg border border-gray-400 md:border-[#555] shadow-inner"
-                        style={{ backgroundColor: tempColors.primary }}
+                        style={{ backgroundColor: (tempColors || tempColorsLocal).primary }}
                       ></div>
                     </div>
                   </div>
                   {activeColorPicker === 'primary' && (
                     <div ref={(el) => colorPickerRefs.current['primary'] = el} className="absolute top-full left-0 z-50 mt-2">
                       <SketchPicker
-                        color={tempColors.primary}
+                        color={(tempColors || tempColorsLocal).primary}
                         onChange={(color) => handleColorPickerChange('primary', color)}
                       />
                     </div>
@@ -341,16 +375,16 @@ export default function ChatboxPrivatization({ themeColors }) {
                       🤖
                     </div>
                     <div className="relative flex-1 h-5 sm:h-6 md:h-6 lg:h-7 xl:h-8">
-                      <div 
+                      <div
                         className="w-full h-full rounded-md md:rounded-lg border border-gray-400 md:border-[#555] shadow-inner"
-                        style={{ backgroundColor: tempColors.aiMessage }}
+                        style={{ backgroundColor: (tempColors || tempColorsLocal).aiMessage }}
                       ></div>
                     </div>
                   </div>
                   {activeColorPicker === 'aiMessage' && (
                     <div ref={(el) => colorPickerRefs.current['aiMessage'] = el} className="absolute top-full left-0 z-50 mt-2">
                       <SketchPicker
-                        color={tempColors.aiMessage}
+                        color={(tempColors || tempColorsLocal).aiMessage}
                         onChange={(color) => handleColorPickerChange('aiMessage', color)}
                       />
                     </div>
@@ -369,16 +403,16 @@ export default function ChatboxPrivatization({ themeColors }) {
                       👤
                     </div>
                     <div className="relative flex-1 h-5 sm:h-6 md:h-6 lg:h-7 xl:h-8">
-                      <div 
+                      <div
                         className="w-full h-full rounded-md md:rounded-lg border border-gray-400 md:border-[#555] shadow-inner"
-                        style={{ backgroundColor: tempColors.userMessage }}
+                        style={{ backgroundColor: (tempColors || tempColorsLocal).userMessage }}
                       ></div>
                     </div>
                   </div>
                   {activeColorPicker === 'userMessage' && (
                     <div ref={(el) => colorPickerRefs.current['userMessage'] = el} className="absolute top-full left-0 z-50 mt-2">
                       <SketchPicker
-                        color={tempColors.userMessage}
+                        color={(tempColors || tempColorsLocal).userMessage}
                         onChange={(color) => handleColorPickerChange('userMessage', color)}
                       />
                     </div>
@@ -397,16 +431,16 @@ export default function ChatboxPrivatization({ themeColors }) {
                       📝
                     </div>
                     <div className="relative flex-1 h-5 sm:h-6 md:h-6 lg:h-7 xl:h-8">
-                      <div 
+                      <div
                         className="w-full h-full rounded-md md:rounded-lg border border-gray-400 md:border-[#555] shadow-inner"
-                        style={{ backgroundColor: tempColors.aiTextColor }}
+                        style={{ backgroundColor: (tempColors || tempColorsLocal).aiTextColor }}
                       ></div>
                     </div>
                   </div>
                   {activeColorPicker === 'aiTextColor' && (
                     <div ref={(el) => colorPickerRefs.current['aiTextColor'] = el} className="absolute top-full left-0 z-50 mt-2">
                       <SketchPicker
-                        color={tempColors.aiTextColor}
+                        color={(tempColors || tempColorsLocal).aiTextColor}
                         onChange={(color) => handleColorPickerChange('aiTextColor', color)}
                       />
                     </div>
@@ -425,16 +459,16 @@ export default function ChatboxPrivatization({ themeColors }) {
                       ✍️
                     </div>
                     <div className="relative flex-1 h-5 sm:h-6 md:h-6 lg:h-7 xl:h-8">
-                      <div 
+                      <div
                         className="w-full h-full rounded-md md:rounded-lg border border-gray-400 md:border-[#555] shadow-inner"
-                        style={{ backgroundColor: tempColors.userTextColor }}
+                        style={{ backgroundColor: (tempColors || tempColorsLocal).userTextColor }}
                       ></div>
                     </div>
                   </div>
                   {activeColorPicker === 'userTextColor' && (
                     <div ref={(el) => colorPickerRefs.current['userTextColor'] = el} className="absolute top-full left-0 z-50 mt-2">
                       <SketchPicker
-                        color={tempColors.userTextColor}
+                        color={(tempColors || tempColorsLocal).userTextColor}
                         onChange={(color) => handleColorPickerChange('userTextColor', color)}
                       />
                     </div>
@@ -459,16 +493,16 @@ export default function ChatboxPrivatization({ themeColors }) {
                       🎨
                     </div>
                     <div className="relative flex-1 h-5 sm:h-6 md:h-6 lg:h-7 xl:h-8">
-                      <div 
+                      <div
                         className="w-full h-full rounded-md md:rounded-lg border border-gray-400 md:border-[#555] shadow-inner"
-                        style={{ backgroundColor: tempColors.buttonPrimary }}
+                        style={{ backgroundColor: (tempColors || tempColorsLocal).buttonPrimary }}
                       ></div>
                     </div>
                   </div>
                   {activeColorPicker === 'buttonPrimary' && (
                     <div ref={(el) => colorPickerRefs.current['buttonPrimary'] = el} className="absolute top-full left-0 z-50 mt-2">
                       <SketchPicker
-                        color={tempColors.buttonPrimary}
+                        color={(tempColors || tempColorsLocal).buttonPrimary}
                         onChange={(color) => handleColorPickerChange('buttonPrimary', color)}
                       />
                     </div>
@@ -487,16 +521,16 @@ export default function ChatboxPrivatization({ themeColors }) {
                       🎨
                     </div>
                     <div className="relative flex-1 h-5 sm:h-6 md:h-6 lg:h-7 xl:h-8">
-                      <div 
+                      <div
                         className="w-full h-full rounded-md md:rounded-lg border border-gray-400 md:border-[#555] shadow-inner"
-                        style={{ backgroundColor: tempColors.buttonBorderColor || tempColors.borderColor }}
+                        style={{ backgroundColor: (tempColors || tempColorsLocal).buttonBorderColor || (tempColors || tempColorsLocal).borderColor }}
                       ></div>
                     </div>
                   </div>
                   {activeColorPicker === 'buttonBorderColor' && (
                     <div ref={(el) => colorPickerRefs.current['buttonBorderColor'] = el} className="absolute top-full left-0 z-50 mt-2">
                       <SketchPicker
-                        color={tempColors.buttonBorderColor || tempColors.borderColor}
+                        color={(tempColors || tempColorsLocal).buttonBorderColor || (tempColors || tempColorsLocal).borderColor}
                         onChange={(color) => handleColorPickerChange('buttonBorderColor', color)}
                       />
                     </div>
@@ -515,16 +549,16 @@ export default function ChatboxPrivatization({ themeColors }) {
                       💬
                     </div>
                     <div className="relative flex-1 h-5 sm:h-6 md:h-6 lg:h-7 xl:h-8">
-                      <div 
+                      <div
                         className="w-full h-full rounded-md md:rounded-lg border border-gray-400 md:border-[#555] shadow-inner"
-                        style={{ backgroundColor: tempColors.buttonIcon || '#FFFFFF' }}
+                        style={{ backgroundColor: (tempColors || tempColorsLocal).buttonIcon || '#FFFFFF' }}
                       ></div>
                     </div>
                   </div>
                   {activeColorPicker === 'buttonIcon' && (
                     <div ref={(el) => colorPickerRefs.current['buttonIcon'] = el} className="absolute top-full left-0 z-50 mt-2">
                       <SketchPicker
-                        color={tempColors.buttonIcon || '#FFFFFF'}
+                        color={(tempColors || tempColorsLocal).buttonIcon || '#FFFFFF'}
                         onChange={(color) => handleColorPickerChange('buttonIcon', color)}
                       />
                     </div>
