@@ -5,8 +5,8 @@ import HomePage from '@/components/HomePage'
 import ChatboxManagement from '@/components/ChatboxManagement'
 import VirtualStore, { productList } from '@/components/VirtualStore'
 import MessagingRecords from '@/components/MessagingRecords'
-import { Menu, ChevronDown, Plus, MessageSquare } from 'lucide-react'
-import { useState, useRef, useEffect } from 'react'
+import { Menu, ChevronDown, Plus, MessageSquare, Copy, User, Store, Mail, Lock, Eye, EyeOff, RefreshCw, Save, AlertTriangle } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 
 // Kullanıcının mağaza verileri - ana state olarak taşındı
 const initialStoreList = [
@@ -43,11 +43,11 @@ export default function Home() {
   const [storeList, setStoreList] = useState(initialStoreList)
   
   // İlk mağazanın tema renklerini dinamik olarak al
-  const themeColors = {
+  const themeColors = useMemo(() => ({
     primary: storeList[0]?.primaryColor || '#FF6925',
     secondary: storeList[0]?.secondaryColor || '#FFBF31',
     text: storeList[0]?.textColor || '#FFFFFF'
-  }
+  }), [storeList])
   
   // Chatbox dropdown state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -58,10 +58,50 @@ export default function Home() {
   
   // Chatbox tab state
   const [activeTab, setActiveTab] = useState('Önizleme')
-  
+
   // Responsive state for tab positions
   const [isMobileView, setIsMobileView] = useState(false)
-  
+
+  // Password Management States
+  const [isPasswordEditing, setIsPasswordEditing] = useState(false)
+  const [passwordData, setPasswordData] = useState({
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  })
+  const [showPasswords, setShowPasswords] = useState({
+    oldPassword: false,
+    newPassword: false,
+    confirmPassword: false
+  })
+  const [passwordErrors, setPasswordErrors] = useState({
+    newPassword: '',
+    confirmPassword: '',
+    general: ''
+  })
+
+  // Password validation functions
+  const validatePassword = (field, value) => {
+    let error = ''
+
+    if (field === 'newPassword') {
+      if (value.length > 0 && value.length < 8) {
+        error = 'Şifre en az 8 karakter olmalıdır'
+      } else if (value === passwordData.oldPassword && value.length > 0) {
+        error = 'Yeni şifre eski şifre ile aynı olamaz'
+      }
+    }
+
+    if (field === 'confirmPassword') {
+      if (value.length > 0 && value !== passwordData.newPassword) {
+        error = 'Şifreler eşleşmiyor'
+      }
+    }
+
+    setPasswordErrors(prev => ({ ...prev, [field]: error }))
+    return error === ''
+  }
+
   const chatboxTabs = [
     'Önizleme',
     'Özelleştirme', 
@@ -187,7 +227,7 @@ export default function Home() {
     { label: 'Chatbox', title: { bold: 'Chatbox', normal: 'Yönetimi' } },
     { label: 'Mağaza', title: { bold: 'Sanal', normal: 'Mağaza' } },
     { label: 'Mesajlaşma', title: { bold: 'Mesajlaşma', normal: 'Kayıtları' } },
-    { label: 'İstatistik', title: { bold: 'İstatistik', normal: '& Rapor' } },
+    { label: 'İstatistik', title: { bold: 'Kullanıcı', normal: 'Profili' } },
     { label: 'Profil', title: { bold: '', normal: 'Profil' } },
   ]
 
@@ -224,11 +264,12 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#F9F9FB] font-sans">
       {/* Sidebar */}
-      <Sidebar 
-        onTitleChange={setPageTitle} 
+      <Sidebar
+        onTitleChange={setPageTitle}
         onPageChange={handlePageChange}
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+        currentPage={currentPage}
         themeColors={themeColors}
       />
       
@@ -387,11 +428,15 @@ export default function Home() {
           
           {/* Sayfa İçerikleri */}
           {showHomePage && (
-            <HomePage 
+            <HomePage
+              key={storeList.length} // storeList değişince yeniden render et
               shouldExit={isAnimating}
               onAnimationComplete={handleAnimationComplete}
               isActive={currentPage === 0}
               themeColors={themeColors}
+              storeList={storeList}
+              onPageChange={handlePageChange}
+              chatboxList={chatboxList}
             />
           )}
 
@@ -401,7 +446,399 @@ export default function Home() {
               {currentPage === 1 && <ChatboxManagement activeTab={activeTab} themeColors={selectedChatbox?.colors || themeColors} storeList={storeList} productList={productList} selectedChatbox={selectedChatbox} chatboxList={chatboxList} setChatboxList={setChatboxList} />}
               {currentPage === 2 && <VirtualStore themeColors={themeColors} storeList={storeList} setStoreList={setStoreList} chatboxList={chatboxList} />}
               {currentPage === 3 && <MessagingRecords themeColors={selectedChatbox?.colors || themeColors} chatboxList={chatboxList} selectedChatbox={selectedChatbox} onChatboxSelect={setSelectedChatbox} />}
-              {currentPage !== 1 && currentPage !== 2 && currentPage !== 3 && (
+              {currentPage === 4 && (
+                <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+                  {/* First Integration Card */}
+                  <div className="bg-white border-2 rounded-2xl flex flex-col transition-all duration-700 ease-out translate-y-0 scale-100 w-full lg:w-1/2 h-[70vh]" style={{ borderColor: '#E5E7EB', animationDelay: '150ms' }}>
+                    <div className="flex items-center p-4 sm:p-6 lg:p-8 border-b border-gray-200">
+                      <h3 className="text-xl sm:text-2xl lg:text-3xl">
+                        <span
+                          className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
+                          style={{
+                            backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                          }}
+                        >
+                          Profil
+                        </span>
+                        <span
+                          className="font-normal bg-gradient-to-r bg-clip-text text-transparent"
+                          style={{
+                            backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                          }}
+                        >
+                        </span>
+                      </h3>
+                    </div>
+                    <div className="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col">
+                      {/* Kullanıcı Profil Bilgileri */}
+                      <div className="flex flex-col items-center space-y-4 sm:space-y-6">
+
+                        {/* Profil Fotoğrafı ve Kullanıcı Bilgileri - Yan Yana */}
+                        <div className="flex items-center justify-center space-x-4 sm:space-x-6 w-full">
+                          {/* Profil Fotoğrafı */}
+                          <div className="relative flex-shrink-0">
+                            <div
+                              className="w-20 sm:w-24 md:w-28 h-20 sm:h-24 md:h-28 rounded-full flex items-center justify-center shadow-lg border-4 border-white"
+                              style={{
+                                background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                              }}
+                            >
+                              <User className="w-8 sm:w-10 md:w-12 h-8 sm:h-10 md:h-12 text-white" />
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-6 sm:w-7 h-6 sm:h-7 bg-green-400 rounded-full border-3 border-white flex items-center justify-center">
+                              <div className="w-2 h-2 bg-white rounded-full"></div>
+                            </div>
+                          </div>
+
+                          {/* Nickname & Full Name */}
+                          <div className="flex-1 space-y-1">
+                            <h4 className="text-xl sm:text-2xl font-bold text-[#1F1F1F]">@TechGuru</h4>
+                            <p className="text-base sm:text-lg text-[#666] font-medium">Ahmet Yılmaz</p>
+                          </div>
+                        </div>
+
+                        {/* Kullanıcı Bilgileri */}
+                        <div className="w-full space-y-3 sm:space-y-4">
+
+                          {/* Email */}
+                          <div
+                            className="flex items-center space-x-3 p-3 sm:p-4 rounded-xl"
+                            style={{ background: `linear-gradient(to right, ${themeColors.primary}0D, ${themeColors.secondary}0D)` }}
+                          >
+                            <Mail className="w-5 h-5 flex-shrink-0" style={{ color: themeColors.primary }} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-[#666] font-medium">E-posta</p>
+                              <p className="text-base font-semibold text-[#1F1F1F] truncate">ahmet.yilmaz@example.com</p>
+                            </div>
+                          </div>
+
+                          {/* Bağlantılı Mağazalar Başlık */}
+                          <div className="pt-2 sm:pt-4">
+                            <h5 className="text-lg font-bold text-[#1F1F1F] mb-3 flex items-center">
+                              <Store className="w-5 h-5 mr-2" style={{ color: themeColors.primary }} />
+                              Bağlantılı Mağazalar
+                            </h5>
+
+                            {/* Mağazalar Listesi */}
+                            <div className="space-y-2 sm:space-y-3 max-h-40 overflow-y-auto">
+                              <div
+                                className="flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all hover:shadow-sm"
+                                style={{ background: `linear-gradient(to right, ${themeColors.primary}0D, ${themeColors.secondary}0D)` }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = `linear-gradient(to right, ${themeColors.primary}1A, ${themeColors.secondary}1A)`;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = `linear-gradient(to right, ${themeColors.primary}0D, ${themeColors.secondary}0D)`;
+                                }}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <div
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                    style={{ background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})` }}
+                                  >
+                                    <Store className="w-4 h-4 text-white" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold text-[#1F1F1F]">TechMall Store</p>
+                                    <p className="text-xs text-[#666]">WooCommerce</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center bg-green-50 px-2 py-1 rounded-full">
+                                  <div className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1.5"></div>
+                                  <span className="text-xs font-medium text-green-600">Aktif</span>
+                                </div>
+                              </div>
+
+                              <div
+                                className="flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all hover:shadow-sm"
+                                style={{ background: `linear-gradient(to right, ${themeColors.primary}0D, ${themeColors.secondary}0D)` }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = `linear-gradient(to right, ${themeColors.primary}1A, ${themeColors.secondary}1A)`;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = `linear-gradient(to right, ${themeColors.primary}0D, ${themeColors.secondary}0D)`;
+                                }}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <div
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                    style={{ background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})` }}
+                                  >
+                                    <Store className="w-4 h-4 text-white" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold text-[#1F1F1F]">Digital Market</p>
+                                    <p className="text-xs text-[#666]">Magento</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center bg-gray-50 px-2 py-1 rounded-full">
+                                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-1.5"></div>
+                                  <span className="text-xs font-medium text-gray-600">Pasif</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Second Integration Card */}
+                  <div className="bg-white border-2 rounded-2xl flex flex-col transition-all duration-700 ease-out translate-y-0 scale-100 w-full lg:w-1/2 h-[70vh]" style={{ borderColor: '#E5E7EB', animationDelay: '300ms' }}>
+                    <div className="flex items-center p-4 sm:p-6 lg:p-8 border-b border-gray-200">
+                      <h3 className="text-xl sm:text-2xl lg:text-3xl">
+                        <span
+                          className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
+                          style={{
+                            backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                          }}
+                        >
+                          Şifre
+                        </span>
+                        <span
+                          className="font-normal bg-gradient-to-r bg-clip-text text-transparent"
+                          style={{
+                            backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                          }}
+                        >
+                          Yönetimi
+                        </span>
+                      </h3>
+                    </div>
+                    <div className="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col">
+                      {/* Password Management Form */}
+                      <div className="space-y-4 sm:space-y-6 flex-1">
+
+                        {/* Password Fields */}
+                        <div className="space-y-4">
+
+                          {/* Old Password */}
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-[#666] flex items-center">
+                              <Lock className="w-4 h-4 mr-2" style={{ color: themeColors.primary }} />
+                              Mevcut Şifre
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showPasswords.oldPassword ? 'text' : 'password'}
+                                value={passwordData.oldPassword}
+                                onChange={(e) => setPasswordData({ ...passwordData, oldPassword: e.target.value })}
+                                disabled={!isPasswordEditing}
+                                className={`w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 pr-12 text-gray-800 ${
+                                  isPasswordEditing
+                                    ? 'border-gray-200 focus:border-transparent focus:ring-2 bg-white placeholder-gray-400'
+                                    : 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed placeholder-gray-300'
+                                }`}
+                                style={{
+                                  focusRingColor: isPasswordEditing ? `${themeColors.primary}30` : undefined
+                                }}
+                                placeholder="Mevcut şifrenizi girin"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPasswords({ ...showPasswords, oldPassword: !showPasswords.oldPassword })}
+                                disabled={!isPasswordEditing}
+                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors ${
+                                  isPasswordEditing
+                                    ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                                    : 'text-gray-300 cursor-not-allowed'
+                                }`}
+                              >
+                                {showPasswords.oldPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* New Password */}
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-[#666] flex items-center">
+                              <Lock className="w-4 h-4 mr-2" style={{ color: themeColors.primary }} />
+                              Yeni Şifre
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showPasswords.newPassword ? 'text' : 'password'}
+                                value={passwordData.newPassword}
+                                onChange={(e) => {
+                                  const newValue = e.target.value
+                                  setPasswordData({ ...passwordData, newPassword: newValue })
+                                  // Real-time validation
+                                  if (isPasswordEditing) {
+                                    setTimeout(() => validatePassword('newPassword', newValue), 100)
+                                  }
+                                }}
+                                disabled={!isPasswordEditing}
+                                className={`w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 pr-12 text-gray-800 ${
+                                  isPasswordEditing
+                                    ? 'border-gray-200 focus:border-transparent focus:ring-2 bg-white placeholder-gray-400'
+                                    : 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed placeholder-gray-300'
+                                }`}
+                                style={{
+                                  focusRingColor: isPasswordEditing ? `${themeColors.primary}30` : undefined
+                                }}
+                                placeholder="Yeni şifrenizi girin"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPasswords({ ...showPasswords, newPassword: !showPasswords.newPassword })}
+                                disabled={!isPasswordEditing}
+                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors ${
+                                  isPasswordEditing
+                                    ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                                    : 'text-gray-300 cursor-not-allowed'
+                                }`}
+                              >
+                                {showPasswords.newPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                            {/* Error Message for New Password */}
+                            {passwordErrors.newPassword && (
+                              <div className="flex items-center space-x-2 text-red-500 text-sm mt-1">
+                                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                                <span>{passwordErrors.newPassword}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Confirm New Password */}
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-[#666] flex items-center">
+                              <Lock className="w-4 h-4 mr-2" style={{ color: themeColors.primary }} />
+                              Yeni Şifre Tekrar
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showPasswords.confirmPassword ? 'text' : 'password'}
+                                value={passwordData.confirmPassword}
+                                onChange={(e) => {
+                                  const newValue = e.target.value
+                                  setPasswordData({ ...passwordData, confirmPassword: newValue })
+                                  // Real-time validation
+                                  if (isPasswordEditing) {
+                                    setTimeout(() => validatePassword('confirmPassword', newValue), 100)
+                                  }
+                                }}
+                                disabled={!isPasswordEditing}
+                                className={`w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 pr-12 text-gray-800 ${
+                                  isPasswordEditing
+                                    ? 'border-gray-200 focus:border-transparent focus:ring-2 bg-white placeholder-gray-400'
+                                    : 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed placeholder-gray-300'
+                                }`}
+                                style={{
+                                  focusRingColor: isPasswordEditing ? `${themeColors.primary}30` : undefined
+                                }}
+                                placeholder="Yeni şifrenizi tekrar girin"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPasswords({ ...showPasswords, confirmPassword: !showPasswords.confirmPassword })}
+                                disabled={!isPasswordEditing}
+                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors ${
+                                  isPasswordEditing
+                                    ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                                    : 'text-gray-300 cursor-not-allowed'
+                                }`}
+                              >
+                                {showPasswords.confirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                            {/* Error Message for Confirm Password */}
+                            {passwordErrors.confirmPassword && (
+                              <div className="flex items-center space-x-2 text-red-500 text-sm mt-1">
+                                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                                <span>{passwordErrors.confirmPassword}</span>
+                              </div>
+                            )}
+                          </div>
+
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex justify-end space-x-3 pt-4">
+                          {/* Refresh Password Button */}
+                          <button
+                            onClick={() => {
+                              setIsPasswordEditing(!isPasswordEditing)
+                              if (!isPasswordEditing) {
+                                // Reset form when enabling edit mode
+                                setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' })
+                                setShowPasswords({ oldPassword: false, newPassword: false, confirmPassword: false })
+                                setPasswordErrors({ newPassword: '', confirmPassword: '', general: '' })
+                              }
+                            }}
+                            className="flex items-center space-x-2 px-4 py-2 border border-gray-200 text-[#666] rounded-lg font-medium transition-all duration-300 hover:border-gray-300 hover:shadow-sm"
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = `${themeColors.primary}30`
+                              e.currentTarget.style.color = themeColors.primary
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = '#d1d5db'
+                              e.currentTarget.style.color = '#666'
+                            }}
+                          >
+                            <RefreshCw className={`w-4 h-4 ${isPasswordEditing ? 'rotate-180' : ''} transition-transform duration-300`} />
+                            <span>{isPasswordEditing ? 'İptal Et' : 'Şifremi Yenile'}</span>
+                          </button>
+
+                          {/* Save Button */}
+                          <button
+                            onClick={() => {
+                              // Handle password save logic here
+                              console.log('Password saved:', passwordData)
+                              setIsPasswordEditing(false)
+                              setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' })
+                              setShowPasswords({ oldPassword: false, newPassword: false, confirmPassword: false })
+                              setPasswordErrors({ newPassword: '', confirmPassword: '', general: '' })
+                            }}
+                            disabled={
+                              !isPasswordEditing ||
+                              !passwordData.oldPassword ||
+                              !passwordData.newPassword ||
+                              !passwordData.confirmPassword ||
+                              passwordData.newPassword !== passwordData.confirmPassword ||
+                              passwordData.newPassword.length < 8 ||
+                              passwordData.newPassword === passwordData.oldPassword ||
+                              passwordErrors.newPassword ||
+                              passwordErrors.confirmPassword
+                            }
+                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
+                              isPasswordEditing &&
+                              passwordData.oldPassword &&
+                              passwordData.newPassword &&
+                              passwordData.confirmPassword &&
+                              passwordData.newPassword === passwordData.confirmPassword &&
+                              passwordData.newPassword.length >= 8 &&
+                              passwordData.newPassword !== passwordData.oldPassword &&
+                              !passwordErrors.newPassword &&
+                              !passwordErrors.confirmPassword
+                                ? 'text-white shadow-sm hover:shadow-md hover:scale-105'
+                                : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                            }`}
+                            style={{
+                              background: isPasswordEditing &&
+                                       passwordData.oldPassword &&
+                                       passwordData.newPassword &&
+                                       passwordData.confirmPassword &&
+                                       passwordData.newPassword === passwordData.confirmPassword &&
+                                       passwordData.newPassword.length >= 8 &&
+                                       passwordData.newPassword !== passwordData.oldPassword &&
+                                       !passwordErrors.newPassword &&
+                                       !passwordErrors.confirmPassword
+                                ? `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                                : undefined
+                            }}
+                          >
+                            <Save className="w-4 h-4" />
+                            <span>Kaydet</span>
+                          </button>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {currentPage !== 1 && currentPage !== 2 && currentPage !== 3 && currentPage !== 4 && (
                 <div className="flex items-center justify-center h-96">
                   <div className="text-center text-[#666]">
                     <p>Bu sayfa henüz geliştirilmedi.</p>

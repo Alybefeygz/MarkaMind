@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, MessageSquare, ShoppingBag, MessageCircle, BarChart3, User, X, ChevronDown, Plus } from 'lucide-react'
+import { Home, MessageSquare, ShoppingBag, MessageCircle, User, X, ChevronDown, Plus } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 const menuItems = [
@@ -8,7 +8,6 @@ const menuItems = [
   { icon: MessageSquare, label: 'Chatbox', title: { bold: 'Chatbox', normal: 'Yönetimi' } },
   { icon: ShoppingBag, label: 'Mağaza', title: { bold: 'Sanal', normal: 'Mağaza' } },
   { icon: MessageCircle, label: 'Mesajlaşma', title: { bold: 'Mesajlaşma', normal: 'Kayıtları' } },
-  { icon: BarChart3, label: 'İstatistik', title: { bold: 'İstatistik', normal: '& Rapor' } },
   { icon: User, label: 'Profil', title: { bold: '', normal: 'Profil' } },
 ]
 
@@ -17,6 +16,7 @@ interface SidebarProps {
   onPageChange: (pageIndex: number) => void
   isOpen: boolean
   onToggle: () => void
+  currentPage: number
   themeColors: {
     primary: string
     secondary: string
@@ -31,9 +31,14 @@ const chatboxList = [
   { id: 3, name: 'AirPods Pro Chatbox', status: 'inactive', messages: 456 }
 ]
 
-export default function Sidebar({ onTitleChange, onPageChange, isOpen, onToggle, themeColors }: SidebarProps) {
-  const [activeIndex, setActiveIndex] = useState(0)
+export default function Sidebar({ onTitleChange, onPageChange, isOpen, onToggle, currentPage, themeColors }: SidebarProps) {
+  const [activeIndex, setActiveIndex] = useState(currentPage)
   const [windowWidth, setWindowWidth] = useState(0)
+
+  // currentPage prop'u değiştiğinde activeIndex'i güncelle
+  useEffect(() => {
+    setActiveIndex(currentPage)
+  }, [currentPage])
 
   // Client-side'da window boyutunu al
   useEffect(() => {
@@ -43,10 +48,10 @@ export default function Sidebar({ onTitleChange, onPageChange, isOpen, onToggle,
 
     // İlk yüklemede boyutu ayarla
     handleResize()
-    
+
     // Resize listener ekle
     window.addEventListener('resize', handleResize)
-    
+
     return () => window.removeEventListener('resize', handleResize)
   }, [])
   
@@ -90,7 +95,7 @@ export default function Sidebar({ onTitleChange, onPageChange, isOpen, onToggle,
         style={{
           background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`,
           left: isOpen ? windowWidth < 640 ? '60px' : windowWidth < 768 ? '78px' : '94.5px' : '-10px',
-          top: `calc(50% + ${(activeIndex - 2.5) * (windowWidth < 640 ? 52 : windowWidth < 768 ? 58 : 64) + (windowWidth < 640 ? 20 : windowWidth < 768 ? 22 : 24)}px)`,
+          top: `calc(50% + ${(activeIndex - 2) * (windowWidth < 640 ? 52 : windowWidth < 768 ? 58 : 64) + (windowWidth < 640 ? 20 : windowWidth < 768 ? 22 : 24)}px)`,
           transform: 'translateY(-50%)'
         }}
       ></div>
@@ -113,11 +118,11 @@ export default function Sidebar({ onTitleChange, onPageChange, isOpen, onToggle,
               title={item.label}
               onClick={() => handleIconClick(index)}
             >
-              <div 
-                className={`absolute inset-0 w-12 h-12 sm:w-13 sm:h-13 md:w-14 md:h-14 rounded-full transition-opacity duration-300 ease-in-out ${isActive ? 'opacity-100' : 'opacity-0'}`} 
+              <div
+                className={`absolute inset-0 w-12 h-12 sm:w-13 sm:h-13 md:w-14 md:h-14 rounded-full transition-opacity duration-300 ease-in-out ${isActive ? 'opacity-100' : 'opacity-0'}`}
                 style={{
-                  left: '-4px', 
-                  top: '50%', 
+                  left: '-4px',
+                  top: '50%',
                   transform: 'translateY(-50%)',
                   background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
                 }}

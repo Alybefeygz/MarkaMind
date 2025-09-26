@@ -15,7 +15,7 @@ const platformOptions = [
 
 // Platform renkleri
 const platformColors = {
-  'İKAS': { primaryColor: '#DCFB6D', secondaryColor: '#232228', textColor: '#FFFFFF' },
+  'İKAS': { primaryColor: '#232228', secondaryColor: '#DCFB6D', textColor: '#FFFFFF' },
   'Kendi Web Sitem': { primaryColor: '#6434F8', secondaryColor: '#7D56F9', textColor: '#FFFFFF' }
 }
 

@@ -59,11 +59,59 @@ const calendarData = [
   { date: '2025-02-07', day: 7, messages: 423, intensity: 4 }
 ]
 
-export default function HomePage({ shouldExit, onAnimationComplete, isActive, themeColors }) {
+export default function HomePage({ shouldExit, onAnimationComplete, isActive, themeColors, storeList, onPageChange, chatboxList }) {
   const [hoveredDay, setHoveredDay] = useState(null)
   const [isVisible, setIsVisible] = useState(false)
   const [isExiting, setIsExiting] = useState(false)
-  
+  const [openStoreDropdown, setOpenStoreDropdown] = useState(false)
+  const [openChatboxDropdown, setOpenChatboxDropdown] = useState(false)
+
+  // Chatbox verilerini hesapla
+  const totalChatboxes = chatboxList ? chatboxList.length : 0
+  const activeChatboxes = chatboxList ? chatboxList.filter(cb => cb.status === 'active').length : 0
+
+  // Haftalık takip için örnek veri (gerçek projede bu API'den gelir)
+  const thisWeekChatboxes = activeChatboxes
+  const lastWeekChatboxes = Math.max(0, activeChatboxes - 1) // Örnek: bir önceki hafta 1 eksik
+  const weeklyGrowth = lastWeekChatboxes > 0 ? Math.round(((thisWeekChatboxes - lastWeekChatboxes) / lastWeekChatboxes) * 100) : 0
+
+  // Son 7 hafta için grafik verisi (örnek)
+  const chatboxTrendData = [
+    { name: '7 hafta', value: Math.max(0, activeChatboxes - 6) },
+    { name: '6 hafta', value: Math.max(0, activeChatboxes - 5) },
+    { name: '5 hafta', value: Math.max(0, activeChatboxes - 4) },
+    { name: '4 hafta', value: Math.max(0, activeChatboxes - 3) },
+    { name: '3 hafta', value: Math.max(0, activeChatboxes - 2) },
+    { name: '2 hafta', value: lastWeekChatboxes },
+    { name: 'Bu hafta', value: thisWeekChatboxes },
+  ]
+
+  // İstatistikler kartı için hesaplamalar
+  const totalMessages = chatboxList ? chatboxList.reduce((total, chatbox) => {
+    return total + (chatbox.messages || 0)
+  }, 0) : 0
+
+  // Mock data for success metrics
+  const successfulConversations = Math.floor(totalMessages * 0.65) // %65 başarılı konuşma varsayımı
+  const successRate = totalMessages > 0 ? Math.round((successfulConversations / totalMessages) * 100) : 0
+  const progressPercentage = Math.min(95, Math.max(10, Math.round((totalMessages / 5000) * 100))) // 5000 maksimum hedef
+
+  // Dropdown'ları kapatmak için click outside handler
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setOpenStoreDropdown(false)
+      setOpenChatboxDropdown(false)
+    }
+
+    if (openStoreDropdown || openChatboxDropdown) {
+      document.addEventListener('click', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside)
+    }
+  }, [openStoreDropdown, openChatboxDropdown])
+
   // Theme renklerini kullanarak performans verisini oluştur
   const performanceData = getPerformanceData(themeColors)
 
@@ -149,35 +197,55 @@ export default function HomePage({ shouldExit, onAnimationComplete, isActive, th
               <p className="text-base text-[#666]">Genel Durum</p>
             </div>
           </div>
-          <MoreHorizontal className="w-5 h-5 text-[#666] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" />
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenStoreDropdown(!openStoreDropdown)
+              }}
+              className="w-5 h-5 text-[#666] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-[#444]"
+            >
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
+            {openStoreDropdown && (
+              <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[120px]">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onPageChange(2)
+                    setOpenStoreDropdown(false)
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  Detay Gör
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="space-y-4">
-          <div 
-            className="p-3 rounded-lg flex items-center justify-between"
-            style={{ background: `linear-gradient(to right, ${themeColors.primary}0D, ${themeColors.secondary}0D)` }}
-          >
-            <div>
-              <p className="text-base font-medium" style={{ color: themeColors.primary }}>TechMall Store</p>
-              <p className="text-sm text-[#666]">WooCommerce Platform</p>
+          {storeList && storeList.length > 0 ? (
+            storeList.slice(-2).reverse().map((store, index) => (
+              <div
+                key={index}
+                className="p-3 rounded-lg flex items-center justify-between"
+                style={{ background: `linear-gradient(to right, ${themeColors.primary}0D, ${themeColors.secondary}0D)` }}
+              >
+                <div>
+                  <p className="text-base font-medium" style={{ color: themeColors.primary }}>{store.name}</p>
+                  <p className="text-sm text-[#666]">{store.platform} Platform</p>
+                </div>
+                <div className="flex items-center bg-green-50 px-3 py-2 rounded-full">
+                  <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+                  <span className="text-base text-green-600 font-semibold">Aktif Çalışıyor</span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-3 rounded-lg text-center">
+              <p className="text-sm text-[#666]">Henüz mağaza eklenmedi</p>
             </div>
-            <div className="flex items-center bg-green-50 px-3 py-2 rounded-full">
-              <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
-              <span className="text-base text-green-600 font-semibold">Aktif Çalışıyor</span>
-            </div>
-          </div>
-          <div 
-            className="p-3 rounded-lg flex items-center justify-between"
-            style={{ background: `linear-gradient(to right, ${themeColors.primary}0D, ${themeColors.secondary}0D)` }}
-          >
-            <div>
-              <p className="text-base font-medium" style={{ color: themeColors.primary }}>Digital Market</p>
-              <p className="text-sm text-[#666]">Magento Platform</p>
-            </div>
-            <div className="flex items-center bg-gray-50 px-3 py-2 rounded-full">
-              <div className="w-2 h-2 bg-gray-400 rounded-full mr-2"></div>
-              <span className="text-base text-gray-600 font-semibold">Aktif Çalışmıyor</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -199,7 +267,31 @@ export default function HomePage({ shouldExit, onAnimationComplete, isActive, th
               <p className="text-base text-[#666]">Toplam etkileşim merkezi sayısı</p>
             </div>
           </div>
-          <MoreHorizontal className="w-5 h-5 text-[#666] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" />
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenChatboxDropdown(!openChatboxDropdown)
+              }}
+              className="w-5 h-5 text-[#666] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-[#444]"
+            >
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
+            {openChatboxDropdown && (
+              <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[120px]">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onPageChange(1)
+                    setOpenChatboxDropdown(false)
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  Detay Gör
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
@@ -212,28 +304,34 @@ export default function HomePage({ shouldExit, onAnimationComplete, isActive, th
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent'
                 }}
-              >12</div>
-              <div className="flex items-center bg-green-50 px-3 py-1 rounded-full mt-2 sm:mt-0 sm:mb-2 w-fit">
-                <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                <span className="text-green-600 font-bold">+8%</span>
+              >{activeChatboxes}</div>
+              <div className={`flex items-center px-3 py-1 rounded-full mt-2 sm:mt-0 sm:mb-2 w-fit ${
+                weeklyGrowth >= 0 ? 'bg-green-50' : 'bg-red-50'
+              }`}>
+                <TrendingUp className={`w-4 h-4 mr-1 ${
+                  weeklyGrowth >= 0 ? 'text-green-500' : 'text-red-500'
+                }`} />
+                <span className={`font-bold ${
+                  weeklyGrowth >= 0 ? 'text-green-600' : 'text-red-600'
+                }`}>{weeklyGrowth > 0 ? '+' : ''}{weeklyGrowth}%</span>
                 <span className="text-[#666] ml-1 text-base">bu hafta</span>
               </div>
             </div>
             <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0 text-base">
               <div className="flex items-center">
                 <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: themeColors.primary }}></div>
-                <span className="text-[#666]">Bu Hafta: 12</span>
+                <span className="text-[#666]">Bu Hafta: {thisWeekChatboxes}</span>
               </div>
               <div className="flex items-center">
                 <div className="w-3 h-3 bg-[#E5E7EB] rounded-full mr-2"></div>
-                <span className="text-[#666]">Geçen Hafta: 11</span>
+                <span className="text-[#666]">Geçen Hafta: {lastWeekChatboxes}</span>
               </div>
             </div>
           </div>
           
           <div className="flex-1 h-20 sm:h-24 mt-4 lg:mt-0">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
+              <LineChart data={chatboxTrendData}>
                 <Line 
                   type="monotone" 
                   dataKey="value" 
@@ -266,7 +364,6 @@ export default function HomePage({ shouldExit, onAnimationComplete, isActive, th
               <p className="text-base text-[#666]">Kullanım Metrikleri</p>
             </div>
           </div>
-          <MoreHorizontal className="w-5 h-5 text-[#666] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" />
         </div>
         
         <div className="space-y-4">
@@ -276,13 +373,13 @@ export default function HomePage({ shouldExit, onAnimationComplete, isActive, th
           >
             <div className="flex justify-between items-center mb-2">
               <span className="text-base font-medium text-[#666]">Toplam Kullanıcı</span>
-              <div className="text-2xl font-bold" style={{ color: themeColors.primary }}>2,847</div>
+              <div className="text-2xl font-bold" style={{ color: themeColors.primary }}>{totalMessages.toLocaleString()}</div>
             </div>
             <div className="w-full bg-[#E5E7EB] rounded-full h-2">
               <div 
                 className="h-2 rounded-full" 
                 style={{
-                  width: '85%',
+                  width: `${progressPercentage}%`,
                   background: `linear-gradient(to right, ${themeColors.primary}, ${themeColors.secondary})`
                 }}
               ></div>
@@ -291,15 +388,15 @@ export default function HomePage({ shouldExit, onAnimationComplete, isActive, th
           
           <div className="grid grid-cols-2 gap-3">
             <div className="text-center p-3 bg-[#F9F9FB] rounded-lg">
-              <div className="text-xl font-bold text-[#1F1F1F]">156</div>
-              <div className="text-sm text-[#666]">Aktif Oturum</div>
+              <div className="text-xl font-bold text-[#1F1F1F]">{successfulConversations.toLocaleString()}</div>
+              <div className="text-sm text-[#666]">Başarılı Konuşma</div>
             </div>
             <div 
               className="text-center p-3 rounded-lg"
               style={{ background: `linear-gradient(to right, ${themeColors.primary}1A, ${themeColors.secondary}1A)` }}
             >
-              <div className="text-xl font-bold" style={{ color: themeColors.primary }}>24.6%</div>
-              <div className="text-sm text-[#666]">Dönüşüm Oranı</div>
+              <div className="text-xl font-bold" style={{ color: themeColors.primary }}>{successRate}%</div>
+              <div className="text-sm text-[#666]">Başarı Oranı</div>
             </div>
           </div>
         </div>
