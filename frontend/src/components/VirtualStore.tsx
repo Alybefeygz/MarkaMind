@@ -3,6 +3,7 @@
 import { Store, MoreHorizontal, ArrowLeft, Star, Plus, X, Upload } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { SketchPicker } from 'react-color'
+import VirtualStoreChatboxAndButtons from './VirtualStoreChatboxAndButtons'
 
 // Mağaza verileri artık prop olarak geliyor
 
@@ -113,6 +114,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   const [selectedStore, setSelectedStore] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [isChatboxVisible, setIsChatboxVisible] = useState(true)
   
   // Ürün listesi state'i
   const [products, setProducts] = useState(productList)
@@ -746,6 +748,26 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Chatbox Component - Sağ Alt Köşe */}
+        <div className="fixed bottom-6 right-6 z-50">
+          <VirtualStoreChatboxAndButtons
+            chatboxTitle={`${selectedStore.name} Asistanı`}
+            initialMessage={`Merhaba! ${selectedProduct.name} hakkında size nasıl yardımcı olabilirim?`}
+            colors={{
+              primary: selectedStore.primaryColor,
+              aiMessage: '#E5E7EB',
+              userMessage: selectedStore.primaryColor,
+              borderColor: selectedStore.primaryColor,
+              aiTextColor: '#1F2937',
+              userTextColor: '#FFFFFF',
+              buttonPrimary: selectedStore.primaryColor,
+              buttonIcon: '#FFFFFF'
+            }}
+            isVisible={isChatboxVisible}
+            onToggle={() => setIsChatboxVisible(!isChatboxVisible)}
+          />
         </div>
 
       </div>
@@ -1922,6 +1944,26 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
             </div>
           </div>
         )}
+
+        {/* Chatbox Component - Sağ Alt Köşe */}
+        <div className="fixed bottom-6 right-6 z-50">
+          <VirtualStoreChatboxAndButtons
+            chatboxTitle={`${selectedStore.name} Asistanı`}
+            initialMessage={`Merhaba! ${selectedStore.name} mağazasına hoş geldiniz. Size nasıl yardımcı olabilirim?`}
+            colors={{
+              primary: selectedStore.primaryColor,
+              aiMessage: '#E5E7EB',
+              userMessage: selectedStore.primaryColor,
+              borderColor: selectedStore.primaryColor,
+              aiTextColor: '#1F2937',
+              userTextColor: '#FFFFFF',
+              buttonPrimary: selectedStore.primaryColor,
+              buttonIcon: '#FFFFFF'
+            }}
+            isVisible={isChatboxVisible}
+            onToggle={() => setIsChatboxVisible(!isChatboxVisible)}
+          />
+        </div>
 
       </div>
     )

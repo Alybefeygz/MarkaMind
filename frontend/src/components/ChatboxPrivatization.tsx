@@ -209,9 +209,9 @@ export default function ChatboxPrivatization({ themeColors }) {
 
   return (
     <div className="relative">
-      
+
       {/* Ana Container - Chatbox ve Özelleştirme yan yana */}
-      <div className="flex gap-4 lg:gap-8 flex-col xl:flex-row" style={{ marginLeft: '20px', marginTop: '20px', marginRight: '20px', paddingBottom: '40px' }}>
+      <div className="flex gap-4 lg:gap-8 flex-col lg:flex-row" style={{ marginLeft: '20px', marginTop: '20px', marginRight: '20px', paddingBottom: '40px' }}>
         
         {/* Chatbox Elements */}
         <ChatboxElements
@@ -300,7 +300,7 @@ export default function ChatboxPrivatization({ themeColors }) {
             {/* Chatbox Tema */}
             <div>
               <h4 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 mb-3 sm:mb-4 lg:mb-5 xl:mb-6">Chatbox Tema</h4>
-              <div className="grid grid-cols-1 md:flex md:gap-1 lg:gap-2 xl:gap-4 md:flex-wrap gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
                 {/* Ana Renk */}
                 <div className="flex flex-col space-y-1.5 md:space-y-1 lg:space-y-2 relative md:flex-1 md:min-w-[60px] lg:min-w-[80px]">
                   <p className="text-xs sm:text-sm font-medium text-gray-700">Ana Renk:</p>
@@ -446,7 +446,7 @@ export default function ChatboxPrivatization({ themeColors }) {
             {/* Chatbox Buton */}
             <div>
               <h4 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 mb-3 sm:mb-4 lg:mb-5 xl:mb-6">Chatbox Buton</h4>
-              <div className="grid grid-cols-1 md:flex md:gap-1 lg:gap-2 xl:gap-4 md:flex-wrap gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
                 {/* Ana Renk */}
                 <div className="flex flex-col space-y-1.5 md:space-y-1 lg:space-y-2 relative md:flex-1 md:min-w-[60px] lg:min-w-[80px]">
                   <p className="text-xs sm:text-sm font-medium text-gray-700">Ana Renk:</p>

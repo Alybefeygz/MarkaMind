@@ -4,6 +4,8 @@ import Sidebar from '@/components/Sidebar'
 import HomePage from '@/components/HomePage'
 import ChatboxManagement from '@/components/ChatboxManagement'
 import VirtualStore, { productList } from '@/components/VirtualStore'
+import MessagingRecords from '@/components/MessagingRecords'
+import Profile from '@/components/Profile'
 import { Menu, ChevronDown, Plus, MessageSquare } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 
@@ -113,7 +115,6 @@ export default function Home() {
     { label: 'Chatbox', title: { bold: 'Chatbox', normal: 'Yönetimi' } },
     { label: 'Mağaza', title: { bold: 'Sanal', normal: 'Mağaza' } },
     { label: 'Mesajlaşma', title: { bold: 'Mesajlaşma', normal: 'Kayıtları' } },
-    { label: 'İstatistik', title: { bold: 'İstatistik', normal: '& Rapor' } },
     { label: 'Profil', title: { bold: '', normal: 'Profil' } },
   ]
 
@@ -202,7 +203,7 @@ export default function Home() {
                 <button
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                   className="flex items-center justify-between space-x-1 sm:space-x-2 bg-white border border-gray-200 rounded-lg px-2 sm:px-3 lg:px-4 py-1.5 sm:py-2 w-full sm:min-w-[160px] lg:min-w-[180px] xl:min-w-[200px] shadow-sm transition-colors text-xs sm:text-sm lg:text-base"
-                  style={{ 
+                  style={{
                     borderColor: isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'
                   }}
                   onMouseEnter={(e) => e.target.style.borderColor = `${themeColors.primary}30`}
@@ -246,9 +247,9 @@ export default function Home() {
               </div>
 
               {/* New Chatbox Button */}
-              <button 
+              <button
                 className="flex items-center justify-center space-x-1 sm:space-x-2 text-white px-2 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg hover:shadow-lg shadow-sm transition-all text-xs sm:text-sm lg:text-base font-medium whitespace-nowrap"
-                style={{ 
+                style={{
                   background: `linear-gradient(to right, ${themeColors.primary}, ${themeColors.secondary})`
                 }}
               >
@@ -256,6 +257,59 @@ export default function Home() {
                 <span className="hidden sm:inline">Yeni Chatbox</span>
                 <span className="sm:hidden">Yeni</span>
               </button>
+            </div>
+            )}
+
+            {/* Mesajlaşma Kayıtları Controls - başlık Mesajlaşma olduğunda göster */}
+            {pageTitle.bold === 'Mesajlaşma' && (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 lg:space-x-4 w-full sm:w-auto">
+              {/* Chatbox Dropdown */}
+              <div className="relative w-full sm:w-auto">
+                <button
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="flex items-center justify-between space-x-1 sm:space-x-2 bg-white border border-gray-200 rounded-lg px-2 sm:px-3 lg:px-4 py-1.5 sm:py-2 w-full sm:min-w-[160px] lg:min-w-[180px] xl:min-w-[200px] shadow-sm transition-colors text-xs sm:text-sm lg:text-base"
+                  style={{
+                    borderColor: isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'
+                  }}
+                  onMouseEnter={(e) => e.target.style.borderColor = `${themeColors.primary}30`}
+                  onMouseLeave={(e) => e.target.style.borderColor = isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'}
+                >
+                  <div className="flex items-center space-x-1 sm:space-x-2 flex-1 min-w-0">
+                    <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: themeColors.primary }} />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedChatbox.name}</span>
+                  </div>
+                  <ChevronDown className={`w-3 sm:w-4 h-3 sm:h-4 text-gray-500 flex-shrink-0 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {isDropdownOpen && pageTitle.bold === 'Mesajlaşma' && (
+                  <div className="absolute left-0 sm:right-0 mt-2 w-full sm:w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                    {chatboxList.map((chatbox) => (
+                      <div
+                        key={chatbox.id}
+                        onClick={() => {
+                          setSelectedChatbox(chatbox)
+                          setIsDropdownOpen(false)
+                        }}
+                        className="flex items-center justify-between p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="flex items-center space-x-2 flex-1 min-w-0">
+                          <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: themeColors.primary }} />
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{chatbox.name}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center flex-shrink-0">
+                          <div className={`w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full ${chatbox.status === 'active' ? 'bg-green-400' : 'bg-gray-400'}`}></div>
+                          <span className={`ml-1 sm:ml-2 text-xs ${chatbox.status === 'active' ? 'text-green-600' : 'text-gray-500'}`}>
+                            {chatbox.status === 'active' ? 'Aktif' : 'Pasif'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             )}
           </div>
@@ -282,15 +336,6 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                {/* Kayma animasyonu için çizgi - responsive genişlik ve pozisyon */}
-                <div 
-                  className="absolute bottom-0 h-0.5 transition-all duration-300 ease-in-out"
-                  style={{
-                    left: `${getUnderlinePosition(activeTabIndex)}px`,
-                    width: `${getUnderlineWidth()}px`,
-                    backgroundColor: themeColors.primary
-                  }}
-                ></div>
               </div>
             </div>
           )}
@@ -318,7 +363,9 @@ export default function Home() {
             <>
               {currentPage === 1 && <ChatboxManagement activeTab={activeTab} themeColors={themeColors} storeList={storeList} productList={productList} />}
               {currentPage === 2 && <VirtualStore themeColors={themeColors} storeList={storeList} setStoreList={setStoreList} />}
-              {currentPage !== 1 && currentPage !== 2 && (
+              {currentPage === 3 && <MessagingRecords themeColors={themeColors} />}
+              {currentPage === 4 && <Profile themeColors={themeColors} />}
+              {currentPage !== 1 && currentPage !== 2 && currentPage !== 3 && currentPage !== 4 && (
                 <div className="flex items-center justify-center h-96">
                   <div className="text-center text-[#666]">
                     <p>Bu sayfa henüz geliştirilmedi.</p>

@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, MessageSquare, ShoppingBag, MessageCircle, BarChart3, User, X, ChevronDown, Plus } from 'lucide-react'
+import { Home, MessageSquare, ShoppingBag, MessageCircle, User, X, ChevronDown, Plus } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 const menuItems = [
@@ -8,7 +8,6 @@ const menuItems = [
   { icon: MessageSquare, label: 'Chatbox', title: { bold: 'Chatbox', normal: 'Yönetimi' } },
   { icon: ShoppingBag, label: 'Mağaza', title: { bold: 'Sanal', normal: 'Mağaza' } },
   { icon: MessageCircle, label: 'Mesajlaşma', title: { bold: 'Mesajlaşma', normal: 'Kayıtları' } },
-  { icon: BarChart3, label: 'İstatistik', title: { bold: 'İstatistik', normal: '& Rapor' } },
   { icon: User, label: 'Profil', title: { bold: '', normal: 'Profil' } },
 ]
 
@@ -83,14 +82,14 @@ export default function Sidebar({ onTitleChange, onPageChange, isOpen, onToggle,
       </div>
 
       {/* Aktif indicator çizgisi */}
-      <div 
+      <div
         className={`fixed w-1 h-6 sm:h-7 md:h-8 rounded-full transition-all duration-300 ease-in-out z-20 ${
           isOpen ? 'opacity-100' : 'opacity-0'
         }`}
         style={{
           background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`,
           left: isOpen ? windowWidth < 640 ? '60px' : windowWidth < 768 ? '78px' : '94.5px' : '-10px',
-          top: `calc(50% + ${(activeIndex - 2.5) * (windowWidth < 640 ? 52 : windowWidth < 768 ? 58 : 64) + (windowWidth < 640 ? 20 : windowWidth < 768 ? 22 : 24)}px)`,
+          top: `calc(50% + ${(activeIndex - 2) * (windowWidth < 640 ? 52 : windowWidth < 768 ? 58 : 64) + (windowWidth < 640 ? 20 : windowWidth < 768 ? 22 : 24)}px)`,
           transform: 'translateY(-50%)'
         }}
       ></div>
@@ -113,18 +112,18 @@ export default function Sidebar({ onTitleChange, onPageChange, isOpen, onToggle,
               title={item.label}
               onClick={() => handleIconClick(index)}
             >
-              <div 
-                className={`absolute inset-0 w-12 h-12 sm:w-13 sm:h-13 md:w-14 md:h-14 rounded-full transition-opacity duration-300 ease-in-out ${isActive ? 'opacity-100' : 'opacity-0'}`} 
+              <div
+                className={`absolute inset-0 w-12 h-12 sm:w-13 sm:h-13 md:w-14 md:h-14 rounded-full transition-opacity duration-300 ease-in-out ${isActive ? 'opacity-100' : 'opacity-0'}`}
                 style={{
-                  left: '-4px', 
-                  top: '50%', 
+                  left: '-4px',
+                  top: '50%',
                   transform: 'translateY(-50%)',
                   background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
                 }}
               ></div>
-              <Icon 
-                className={`w-5 h-5 sm:w-5.5 sm:h-5.5 md:w-6 md:h-6 relative z-10 transition-all duration-300 ease-in-out ${isActive ? 'text-white scale-125' : 'text-gray-600 group-hover:text-gray-800 group-hover:scale-110'}`} 
-                strokeWidth={isActive ? 1.2 : 0.75} 
+              <Icon
+                className={`w-5 h-5 sm:w-5.5 sm:h-5.5 md:w-6 md:h-6 relative z-10 transition-all duration-300 ease-in-out ${isActive ? 'text-white scale-125' : 'text-gray-600 group-hover:text-gray-800 group-hover:scale-110'}`}
+                strokeWidth={isActive ? 1.2 : 0.75}
                 style={{
                   strokeWidth: isActive ? 1.2 : undefined
                 }}
