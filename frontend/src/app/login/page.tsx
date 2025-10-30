@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Eye, EyeOff, Lock, Mail, ArrowRight, AlertTriangle, Chrome } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -14,6 +14,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Redirect to home if already logged in
+  useEffect(() => {
+    const token = localStorage.getItem('access_token')
+    if (token) {
+      router.push('/')
+    }
+  }, [router])
 
   // Theme colors - matching the design system
   const themeColors = {

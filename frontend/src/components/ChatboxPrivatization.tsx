@@ -236,10 +236,11 @@ export default function ChatboxPrivatization({ themeColors }) {
         />
 
         {/* Chatbox Özelleştirme Kartı */}
-        <div 
+        <div
           className={`bg-white border-2 rounded-2xl flex flex-col flex-1 ${getCardAnimation(1)}`}
-          style={{ 
-            height: '850px', 
+          style={{
+            minHeight: '850px',
+            height: 'auto',
             borderColor: '#E5E7EB',
             animationDelay: getAnimationDelay(1),
             maxWidth: '100%',
@@ -275,23 +276,23 @@ export default function ChatboxPrivatization({ themeColors }) {
             {/* Chatbox Başlık */}
             <div>
               <h4 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 mb-2 sm:mb-3 lg:mb-4">Chatbox</h4>
-              <div className="flex flex-col sm:flex-col lg:flex-row gap-2 sm:gap-3 lg:gap-4 xl:gap-8">
-                <div className="flex flex-col sm:flex-col lg:flex-row lg:items-center gap-1 sm:gap-2">
-                  <p className="text-xs sm:text-sm lg:text-base text-gray-700 whitespace-nowrap">Chatbox Başlık İsmi:</p>
+              <div className="flex flex-col gap-2 sm:gap-3 lg:gap-4">
+                <div className="flex flex-col gap-1 sm:gap-2">
+                  <p className="text-xs sm:text-sm lg:text-base text-gray-700">Chatbox Başlık İsmi:</p>
                   <input
                     type="text"
                     value={tempChatboxTitle}
                     onChange={(e) => handleTitleChange(e.target.value)}
-                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold focus:outline-none focus:border-[#6434F8] bg-white flex-1 min-w-0 text-gray-600"
+                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold focus:outline-none focus:border-[#6434F8] bg-white w-full text-gray-600"
                   />
                 </div>
-                <div className="flex flex-col sm:flex-col lg:flex-row lg:items-center gap-1 sm:gap-2">
-                  <p className="text-xs sm:text-sm lg:text-base text-gray-700 whitespace-nowrap">Chatbox İlk Mesaj:</p>
+                <div className="flex flex-col gap-1 sm:gap-2">
+                  <p className="text-xs sm:text-sm lg:text-base text-gray-700">Chatbox İlk Mesaj:</p>
                   <input
                     type="text"
                     value={tempChatboxInitialMessage}
                     onChange={(e) => handleInitialMessageChange(e.target.value)}
-                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold focus:outline-none focus:border-[#6434F8] bg-white flex-1 min-w-0 text-gray-600"
+                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold focus:outline-none focus:border-[#6434F8] bg-white w-full text-gray-600"
                   />
                 </div>
               </div>

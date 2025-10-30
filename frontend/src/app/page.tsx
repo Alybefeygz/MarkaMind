@@ -6,8 +6,9 @@ import ChatboxManagement from '@/components/ChatboxManagement'
 import VirtualStore, { productList } from '@/components/VirtualStore'
 import MessagingRecords from '@/components/MessagingRecords'
 import Profile from '@/components/Profile'
-import { Menu, ChevronDown, Plus, MessageSquare } from 'lucide-react'
+import { Menu, ChevronDown, Plus, MessageSquare, LogOut } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 // Kullanıcının mağaza verileri - ana state olarak taşındı
 const initialStoreList = [
@@ -34,6 +35,7 @@ const initialStoreList = [
 ]
 
 export default function Home() {
+  const router = useRouter()
   const [pageTitle, setPageTitle] = useState({ bold: 'Ana', normal: 'Sayfa' })
   const [currentPage, setCurrentPage] = useState(0)
   const [nextPage, setNextPage] = useState(0)
@@ -88,17 +90,36 @@ export default function Home() {
     return positions[index] - (width / 2)
   }
   
+  // Authentication check - redirect to login if not authenticated
+  useEffect(() => {
+    const token = localStorage.getItem('access_token')
+    if (!token) {
+      router.push('/login')
+    }
+  }, [router])
+
+  // Logout function
+  const handleLogout = () => {
+    // Clear all auth data from localStorage
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+    localStorage.removeItem('user_data')
+
+    // Redirect to login page
+    router.push('/login')
+  }
+
   // Window resize handler
   useEffect(() => {
     const handleResize = () => {
       setIsMobileView(window.innerWidth < 640)
     }
-    
+
     // Set initial value
     if (typeof window !== 'undefined') {
       setIsMobileView(window.innerWidth < 640)
       window.addEventListener('resize', handleResize)
-      
+
       return () => window.removeEventListener('resize', handleResize)
     }
   }, [])
@@ -177,23 +198,40 @@ export default function Home() {
                 className={`p-1.5 sm:p-2 rounded-lg transition-all duration-300 group mr-2 sm:mr-3 md:mr-4 ${
                   isSidebarOpen ? 'opacity-0 translate-x-6 sm:translate-x-7 md:translate-x-8 pointer-events-none' : 'opacity-100 translate-x-0'
                 }`}
-                style={{ 
+                style={{
                   backgroundColor: `${themeColors.primary}10`
                 }}
                 onMouseEnter={(e) => e.target.style.backgroundColor = `${themeColors.primary}20`}
                 onMouseLeave={(e) => e.target.style.backgroundColor = `${themeColors.primary}10`}
               >
-                <Menu 
-                  className="w-4 sm:w-5 md:w-6 h-4 sm:h-5 md:h-6 group-hover:scale-110 transition-transform" 
+                <Menu
+                  className="w-4 sm:w-5 md:w-6 h-4 sm:h-5 md:h-6 group-hover:scale-110 transition-transform"
                   style={{ color: themeColors.primary }}
                 />
               </button>
-              
+
               <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl tracking-wide">
                 <span className="text-[#1F1F1F] font-bold">{pageTitle.bold} </span>
                 <span className="text-[#666] font-normal">{pageTitle.normal}</span>
               </h1>
             </div>
+
+            {/* Logout Button - Only visible on Profile page */}
+            {currentPage === 4 && (
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-xl font-medium text-white transition-all duration-300 shadow-sm hover:shadow-md hover:scale-105"
+                style={{
+                  background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                }}
+                title="Çıkış Yap"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="text-sm hidden sm:inline">
+                  Çıkış Yap
+                </span>
+              </button>
+            )}
             
             {/* Chatbox Management Controls - başlık Chatbox olduğunda göster */}
             {pageTitle.bold === 'Chatbox' && (

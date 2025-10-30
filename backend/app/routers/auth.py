@@ -31,6 +31,7 @@ class UserProfileUpdate(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str
+    confirm_new_password: str
 
 class AuthResponse(BaseModel):
     access_token: str
@@ -43,6 +44,10 @@ class UserProfile(BaseModel):
     email: str
     full_name: Optional[str]
     role: str
+    username: Optional[str] = None
+    avatar_url: Optional[str] = None
+    avatar_type: Optional[str] = None
+    avatar_updated_at: Optional[str] = None
     created_at: Optional[str]
     updated_at: Optional[str]
 
@@ -156,14 +161,32 @@ async def get_current_user_profile(current_user: dict = Depends(get_current_user
         
         # Get full user data from database
         user_data = await auth_service.get_user_by_id(user_id)
-        
+
         if not user_data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
-        return UserProfile(**user_data)
+
+        # Debug: Log user data to see what we're getting
+        logger.info(f"User data from DB: {user_data.keys() if user_data else 'None'}")
+        logger.info(f"Avatar URL: {user_data.get('avatar_url') if user_data else 'None'}")
+
+        # Extract only the fields we need for UserProfile
+        profile_data = {
+            "id": user_data.get("id"),
+            "email": user_data.get("email"),
+            "full_name": user_data.get("full_name"),
+            "role": user_data.get("role"),
+            "username": user_data.get("username"),
+            "avatar_url": user_data.get("avatar_url"),
+            "avatar_type": user_data.get("avatar_type"),
+            "avatar_updated_at": str(user_data.get("avatar_updated_at")) if user_data.get("avatar_updated_at") else None,
+            "created_at": str(user_data.get("created_at")) if user_data.get("created_at") else None,
+            "updated_at": str(user_data.get("updated_at")) if user_data.get("updated_at") else None,
+        }
+
+        return UserProfile(**profile_data)
         
     except HTTPException:
         raise
@@ -221,26 +244,33 @@ async def change_password(
     """
     try:
         user_id = current_user.get("id")
-        
+
+        # Validate password confirmation
+        if password_data.new_password != password_data.confirm_new_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Yeni şifreler eşleşmiyor"
+            )
+
         # Change password
         success = await auth_service.change_password(
             user_id=user_id,
             current_password=password_data.current_password,
             new_password=password_data.new_password
         )
-        
+
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to change password"
             )
-        
+
         logger.info(f"Password changed for user: {user_id}")
         return MessageResponse(
             message="Password changed successfully",
             success=True
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:

@@ -30,9 +30,10 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         
         # Decode JWT token with Supabase JWT secret
         payload = jwt.decode(
-            token, 
-            settings.supabase_jwt_secret, 
-            algorithms=[settings.algorithm]
+            token,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=[settings.ALGORITHM],
+            audience="authenticated"
         )
         
         # Extract user info from token

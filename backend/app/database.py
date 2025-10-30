@@ -13,8 +13,8 @@ def create_supabase_client() -> Client:
     """Create and configure Supabase client"""
     try:
         client = create_client(
-            supabase_url=settings.supabase_url,
-            supabase_key=settings.supabase_api_key
+            supabase_url=settings.SUPABASE_URL,
+            supabase_key=settings.SUPABASE_API_KEY
         )
         logger.info("Supabase client created successfully")
         return client
@@ -54,10 +54,10 @@ async def test_supabase_connection() -> bool:
 def validate_supabase_config() -> bool:
     """Validate Supabase configuration"""
     required_configs = [
-        ("SUPABASE_URL", settings.supabase_url),
-        ("SUPABASE_API_KEY", settings.supabase_api_key),
-        ("SUPABASE_ANON_KEY", settings.supabase_anon_key),
-        ("SUPABASE_JWT_SECRET", settings.supabase_jwt_secret)
+        ("SUPABASE_URL", settings.SUPABASE_URL),
+        ("SUPABASE_API_KEY", settings.SUPABASE_API_KEY),
+        ("SUPABASE_ANON_KEY", settings.SUPABASE_ANON_KEY),
+        ("SUPABASE_JWT_SECRET", settings.SUPABASE_JWT_SECRET)
     ]
     
     for config_name, config_value in required_configs:

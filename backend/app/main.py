@@ -8,7 +8,7 @@ app = FastAPI(
     title="MarkaMind API",
     description="Markaniza Ozel Yapay Zeka Destekli Chatbox Sistemi",
     version="1.0.0",
-    debug=settings.debug,
+    debug=settings.DEBUG,
 )
 
 # Configure CORS
@@ -37,19 +37,22 @@ async def health():
     """Detailed health check"""
     return {
         "status": "healthy",
-        "supabase_configured": bool(settings.supabase_url),
-        "openrouter_configured": bool(settings.openrouter_api_key),
-        "debug": settings.debug
+        "supabase_configured": bool(settings.SUPABASE_URL),
+        "openrouter_configured": bool(settings.OPENROUTER_API_KEY),
+        "debug": settings.DEBUG
     }
 
 
 # Include routers
 from app.routers.auth import router as auth_router
+from app.routers.users import router as users_router
+from app.routers.brands import router as brands_router
 
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(users_router, prefix="/api/v1")
+app.include_router(brands_router, prefix="/api/v1")
 
 # Additional routers (will be added in next steps)
-# app.include_router(brands_router, prefix="/api/v1")
 # app.include_router(chatbots_router, prefix="/api/v1")
 # app.include_router(widget_router, prefix="/api/v1")
 
@@ -58,7 +61,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "app.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG
     )

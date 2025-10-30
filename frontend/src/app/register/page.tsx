@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Eye, EyeOff, Lock, Mail, User, ArrowRight, AlertTriangle, Chrome, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -19,6 +19,14 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  // Redirect to home if already logged in
+  useEffect(() => {
+    const token = localStorage.getItem('access_token')
+    if (token) {
+      router.push('/')
+    }
+  }, [router])
 
   // Theme colors - matching the design system
   const themeColors = {
