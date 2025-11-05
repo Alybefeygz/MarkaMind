@@ -1,8 +1,14 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False
+    )
+
     # Supabase Configuration
     supabase_url: str
     supabase_api_key: str
@@ -31,6 +37,10 @@ class Settings(BaseSettings):
     # Storage Configuration
     brand_logo_bucket: str = "brand-logos"
     brand_logo_base_url: Optional[str] = None
+    store_logo_bucket: str = "store-logos"
+    store_logo_base_url: Optional[str] = None
+    product_image_bucket: str = "product-images"
+    product_image_base_url: Optional[str] = None
 
     # Properties for backward compatibility (uppercase access)
     @property
@@ -73,9 +83,29 @@ class Settings(BaseSettings):
     def OPENROUTER_API_KEY(self) -> Optional[str]:
         return self.openrouter_api_key
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    @property
+    def BRAND_LOGO_BUCKET(self) -> str:
+        return self.brand_logo_bucket
+
+    @property
+    def BRAND_LOGO_BASE_URL(self) -> Optional[str]:
+        return self.brand_logo_base_url
+
+    @property
+    def STORE_LOGO_BUCKET(self) -> str:
+        return self.store_logo_bucket
+
+    @property
+    def STORE_LOGO_BASE_URL(self) -> Optional[str]:
+        return self.store_logo_base_url
+
+    @property
+    def PRODUCT_IMAGE_BUCKET(self) -> str:
+        return self.product_image_bucket
+
+    @property
+    def PRODUCT_IMAGE_BASE_URL(self) -> Optional[str]:
+        return self.product_image_base_url
 
 
 # Create global settings instance

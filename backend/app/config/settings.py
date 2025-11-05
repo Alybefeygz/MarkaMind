@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     SUPABASE_API_KEY: str
     SUPABASE_ANON_KEY: str
     SUPABASE_JWT_SECRET: Optional[str] = None
+    SUPABASE_PROJECT_REF: str
+    PASSWORD: str
 
     # JWT
     SECRET_KEY: str
@@ -61,6 +63,10 @@ class Settings(BaseSettings):
     # Storage Configuration
     BRAND_LOGO_BUCKET: str = "brand-logos"
     BRAND_LOGO_BASE_URL: Optional[str] = None
+    STORE_LOGO_BUCKET: str = "store-logos"
+    STORE_LOGO_BASE_URL: Optional[str] = None
+    PRODUCT_IMAGE_BUCKET: str = "product-images"
+    PRODUCT_IMAGE_BASE_URL: Optional[str] = None
 
     class Config:
         env_file = ".env"

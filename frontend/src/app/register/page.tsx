@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Eye, EyeOff, Lock, Mail, User, ArrowRight, AlertTriangle, Chrome, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { DEFAULT_THEME } from '@/lib/theme'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -28,12 +29,8 @@ export default function RegisterPage() {
     }
   }, [router])
 
-  // Theme colors - matching the design system
-  const themeColors = {
-    primary: '#DCFB6D',
-    secondary: '#232228',
-    text: '#FFFFFF'
-  }
+  // Theme colors - TechMall Store sabit renkleri
+  const themeColors = DEFAULT_THEME
 
   // Username validation
   const validateUsername = (username: string) => {

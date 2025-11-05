@@ -4,6 +4,7 @@ import { Store, MoreHorizontal, ArrowLeft, Star, Plus, X, Upload } from 'lucide-
 import { useState, useEffect, useRef } from 'react'
 import { SketchPicker } from 'react-color'
 import VirtualStoreChatboxAndButtons from './VirtualStoreChatboxAndButtons'
+import { createProduct, uploadProductImages, generateSlug, getProductReviews, getStoreProducts, getProductImages } from '@/lib/api'
 
 // Mağaza verileri artık prop olarak geliyor
 
@@ -115,10 +116,16 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [isChatboxVisible, setIsChatboxVisible] = useState(true)
-  
+  const [productReviews, setProductReviews] = useState([])
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false)
+
   // Ürün listesi state'i
   const [products, setProducts] = useState(productList)
-  
+
+  // Brands listesi (Profile'dan gelen marka listesi)
+  const [brands, setBrands] = useState([])
+  const [isLoadingBrands, setIsLoadingBrands] = useState(true)
+
   // Mağaza ekleme sayfası state'leri
   const [showAddStorePage, setShowAddStorePage] = useState(false)
   const [showEditStorePage, setShowEditStorePage] = useState(false)
@@ -130,7 +137,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   const [newStore, setNewStore] = useState({
     name: '',
     description: '',
-    platform: '',
+    selectedBrandId: '', // Platform yerine Brand ID
     logo: '',
     logoPreview: '',
     primaryColor: '#6434F8',
@@ -149,12 +156,13 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     imagePreviews: [],
     reviewCount: 0
   })
+  const [isCreatingProduct, setIsCreatingProduct] = useState(false)
 
   // Color picker modal states
   const [activeColorPicker, setActiveColorPicker] = useState(null)
 
-  // Platform dropdown state
-  const [isPlatformDropdownOpen, setIsPlatformDropdownOpen] = useState(false)
+  // Brand dropdown state (Platform yerine)
+  const [isBrandDropdownOpen, setIsBrandDropdownOpen] = useState(false)
 
   // Store card dropdown state
   const [openStoreDropdown, setOpenStoreDropdown] = useState(null)
@@ -174,7 +182,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
   // Click outside handler için refs
   const colorPickerRefs = useRef({})
-  const platformDropdownRef = useRef(null)
+  const brandDropdownRef = useRef(null) // Platform yerine Brand
   const storeDropdownRef = useRef(null)
   const productDropdownRef = useRef(null)
 
@@ -186,6 +194,124 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     }, 100)
     return () => clearTimeout(timer)
   }, [])
+
+  // Brands listesini yükle
+  useEffect(() => {
+    const loadBrands = async () => {
+      try {
+        setIsLoadingBrands(true)
+        const token = localStorage.getItem('access_token')
+
+        if (!token) {
+          console.warn('⚠️ Token bulunamadı')
+          setIsLoadingBrands(false)
+          return
+        }
+
+        const response = await fetch('http://localhost:8000/api/v1/brands/', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log('✅ Brands loaded for VirtualStore:', data)
+          setBrands(data.items || [])
+        }
+      } catch (error) {
+        console.error('Markalar yüklenirken hata:', error)
+      } finally {
+        setIsLoadingBrands(false)
+      }
+    }
+
+    loadBrands()
+  }, [])
+
+  // Stores listesini yükle (fonksiyon)
+  const loadStores = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+
+      if (!token) {
+        console.warn('⚠️ Token bulunamadı')
+        return
+      }
+
+      const response = await fetch('http://localhost:8000/api/v1/stores/?page=1&size=100', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('✅ Stores loaded for VirtualStore:', data)
+
+        // Backend'den gelen snake_case'i camelCase'e dönüştür
+        const transformedStores = (data.items || []).map(store => ({
+          ...store,
+          primaryColor: store.primary_color || store.primaryColor,
+          secondaryColor: store.secondary_color || store.secondaryColor,
+          textColor: store.text_color || store.textColor
+        }))
+
+        setStoreList(transformedStores)
+      } else {
+        console.error('❌ Stores yüklenirken hata:', response.status)
+      }
+    } catch (error) {
+      console.error('Mağazalar yüklenirken hata:', error)
+    }
+  }
+
+  // Component mount olduğunda stores'ı yükle
+  useEffect(() => {
+    loadStores()
+  }, [])
+
+  // Ürün yorumlarını yükle
+  useEffect(() => {
+    const loadReviews = async () => {
+      if (!selectedProduct || !selectedProduct.id) {
+        setProductReviews([])
+        return
+      }
+
+      // Önce static reviewsList'e bak (mock data için)
+      const staticReviews = reviewsList[selectedProduct.id]
+      if (staticReviews) {
+        setProductReviews(staticReviews)
+        return
+      }
+
+      // Backend'den yorumları çek
+      try {
+        setIsLoadingReviews(true)
+        const response = await getProductReviews(selectedProduct.id, 1, 100, 'approved')
+
+        // Backend response'unu frontend formatına çevir
+        const formattedReviews = response.items.map(review => ({
+          id: review.id,
+          user: review.reviewer_name,
+          rating: review.rating,
+          comment: review.comment,
+          date: new Date(review.created_at).toLocaleDateString('tr-TR')
+        }))
+
+        setProductReviews(formattedReviews)
+        console.log('✅ Yorumlar yüklendi:', formattedReviews)
+      } catch (error) {
+        console.error('Yorumlar yüklenirken hata:', error)
+        setProductReviews([])
+      } finally {
+        setIsLoadingReviews(false)
+      }
+    }
+
+    loadReviews()
+  }, [selectedProduct])
 
   // Click outside handler
   useEffect(() => {
@@ -211,10 +337,10 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
         }
       }
 
-      // Platform dropdown click outside
-      if (isPlatformDropdownOpen) {
-        if (platformDropdownRef.current && !platformDropdownRef.current.contains(event.target)) {
-          setIsPlatformDropdownOpen(false)
+      // Brand dropdown click outside
+      if (isBrandDropdownOpen) {
+        if (brandDropdownRef.current && !brandDropdownRef.current.contains(event.target)) {
+          setIsBrandDropdownOpen(false)
         }
       }
 
@@ -237,14 +363,9 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [activeColorPicker, isPlatformDropdownOpen, openStoreDropdown, openProductDropdown])
+  }, [activeColorPicker, isBrandDropdownOpen, openStoreDropdown, openProductDropdown])
 
-  // Platform değiştiğinde color picker'ları kapat
-  useEffect(() => {
-    if (newStore.platform && newStore.platform !== 'Kendi Web Sitem') {
-      setActiveColorPicker(null)
-    }
-  }, [newStore.platform])
+  // Not: Platform kontrolü artık gerekli değil, renk seçiciler her zaman aktif
 
   // Animasyon fonksiyonları
   const getCardAnimation = (index) => {
@@ -266,12 +387,78 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     setTimeout(() => setIsVisible(true), 100)
   }
 
+  // Mağaza ürünlerini yükle
+  const loadStoreProducts = async (storeId) => {
+    try {
+      console.log('🔄 Mağaza ürünleri yükleniyor:', storeId)
+      const response = await getStoreProducts(storeId, 1, 100)
+
+      // Backend'den gelen ürünleri frontend formatına çevir
+      const formattedProducts = await Promise.all(response.items.map(async (product) => {
+        // Ürün görsellerini çek
+        let images = []
+        try {
+          const productImages = await getProductImages(product.id)
+          images = productImages.map(img => img.image_url)
+        } catch (error) {
+          console.warn('Ürün görselleri yüklenemedi:', product.id, error)
+        }
+
+        // Debug: Backend'den gelen product data'sını logla
+        console.log('📦 Backend product data:', {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          review_count: product.review_count
+        })
+
+        return {
+          id: product.id,
+          name: product.name,
+          price: `₺${parseFloat(product.price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          category: product.category,
+          description: product.description || product.short_description || '',
+          image: images[0] || 'https://via.placeholder.com/300',
+          images: images.length > 0 ? images : ['https://via.placeholder.com/500'],
+          rating: parseFloat(product.average_rating) || 0,
+          reviewCount: product.review_count || 0
+        }
+      }))
+
+      // Products state'ini güncelle
+      setProducts(prev => ({
+        ...prev,
+        [storeId]: formattedProducts
+      }))
+
+      console.log('✅ Mağaza ürünleri yüklendi:', formattedProducts.length, 'ürün')
+    } catch (error) {
+      console.error('❌ Mağaza ürünleri yüklenirken hata:', error)
+      // Hata durumunda boş array set et
+      setProducts(prev => ({
+        ...prev,
+        [storeId]: []
+      }))
+    }
+  }
+
   // Mağaza seçme
-  const handleStoreClick = (store) => {
-    setSelectedStore(store)
+  const handleStoreClick = async (store) => {
+    // Store verilerini camelCase formatına dönüştür
+    const transformedStore = {
+      ...store,
+      primaryColor: store.primary_color || store.primaryColor,
+      secondaryColor: store.secondary_color || store.secondaryColor,
+      textColor: store.text_color || store.textColor
+    }
+
+    setSelectedStore(transformedStore)
     setSelectedProduct(null)
     setIsVisible(false)
     setTimeout(() => setIsVisible(true), 100)
+
+    // Mağaza ürünlerini yükle
+    await loadStoreProducts(store.id)
   }
 
   // Ürün seçme
@@ -301,12 +488,12 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     setShowAddStorePage(false)
     setShowEditStorePage(false)
     setEditingStore(null)
-    setIsPlatformDropdownOpen(false)
+    setIsBrandDropdownOpen(false)
     setOpenStoreDropdown(null)
     setNewStore({
       name: '',
       description: '',
-      platform: '',
+      selectedBrandId: '',
       logo: '',
       logoPreview: '',
       primaryColor: '#6434F8',
@@ -383,69 +570,220 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
   // Mağaza düzenleme sayfasını aç
   const handleEditStore = (store) => {
+    console.log('🔧 Editing store:', store)
+    console.log('📝 Description value:', store.description)
+
     setEditingStore(store)
     setNewStore({
       name: store.name,
       description: store.description || '',
-      platform: store.platform,
+      selectedBrandId: store.brand_id,
       logo: store.logo,
       logoPreview: store.logo,
-      primaryColor: store.primaryColor,
-      secondaryColor: store.secondaryColor,
-      textColor: store.textColor
+      primaryColor: store.primary_color || store.primaryColor,
+      secondaryColor: store.secondary_color || store.secondaryColor,
+      textColor: store.text_color || store.textColor
     })
     setShowEditStorePage(true)
     setIsVisible(false)
     setTimeout(() => setIsVisible(true), 100)
   }
 
-  // Yeni mağaza oluştur - İLK SIRAYA EKLE (tema renkleri değişsin)
-  const handleCreateStore = () => {
-    if (newStore.name && newStore.description && newStore.platform && newStore.logoPreview) {
-      const newStoreData = {
-        id: Date.now(), // Unique ID için timestamp kullan
-        name: newStore.name,
-        description: newStore.description,
-        platform: newStore.platform,
-        logo: newStore.logoPreview, // Base64 önizleme kullanıyoruz
-        status: 'active',
-        primaryColor: newStore.primaryColor,
-        secondaryColor: newStore.secondaryColor,
-        textColor: newStore.textColor
+  // Yeni mağaza oluştur - Backend API ile
+  const handleCreateStore = async () => {
+    if (!newStore.name || !newStore.description || !newStore.selectedBrandId || !newStore.logoPreview) {
+      alert('Lütfen tüm zorunlu alanları doldurun')
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Oturum süreniz dolmuş, lütfen tekrar giriş yapın')
+        return
       }
 
-      // YENİ MAĞAZAYI LİSTENİN BAŞINA EKLE - Bu tema renklerini değiştirecek!
-      setStoreList([newStoreData, ...storeList])
+      // 1. Slug oluştur (name'den türet)
+      let slug = newStore.name
+        .toLowerCase()
+        .replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ı/g, 'i')
+        .replace(/ö/g, 'o')
+        .replace(/ç/g, 'c')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+
+      // Slug boş ise random bir değer ekle
+      if (!slug) {
+        slug = `store-${Date.now()}`
+      }
+
+      console.log('📝 Oluşturulan slug:', slug)
+
+      // 2. Store oluştur (logo olmadan)
+      const storeData = {
+        brand_id: newStore.selectedBrandId,
+        name: newStore.name,
+        slug: slug,
+        description: newStore.description,
+        status: 'active',
+        platform: 'web',
+        primary_color: newStore.primaryColor,
+        secondary_color: newStore.secondaryColor,
+        text_color: newStore.textColor
+      }
+
+      console.log('📤 Backend\'e gönderilen store data:', storeData)
+
+      const createResponse = await fetch('http://localhost:8000/api/v1/stores/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(storeData)
+      })
+
+      if (!createResponse.ok) {
+        const error = await createResponse.json()
+        console.error('❌ Backend hatası:', error)
+        throw new Error(error.detail || 'Store oluşturulamadı')
+      }
+
+      const createdStore = await createResponse.json()
+
+      // 3. Logo'yu yükle
+      if (newStore.logo) {
+        const formData = new FormData()
+        formData.append('file', newStore.logo)
+
+        const uploadResponse = await fetch(
+          `http://localhost:8000/api/v1/stores/${createdStore.id}/logo/upload`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formData
+          }
+        )
+
+        if (uploadResponse.ok) {
+          const uploadResult = await uploadResponse.json()
+          createdStore.logo = uploadResult.logo_url
+        }
+      }
+
+      // 4. Store listesini yeniden yükle
+      await loadStores()
       handleBackToStoreList()
+      alert('Mağaza başarıyla oluşturuldu!')
+    } catch (error) {
+      console.error('Store oluşturma hatası:', error)
+      alert(error.message || 'Mağaza oluşturulurken bir hata oluştu')
     }
   }
 
-  // Mağaza güncelleme işlevi
-  const handleUpdateStore = () => {
-    if (editingStore && newStore.name && newStore.platform && newStore.logoPreview) {
-      const updatedStore = {
-        ...editingStore,
-        name: newStore.name,
-        description: newStore.description,
-        platform: newStore.platform,
-        logo: newStore.logoPreview,
-        primaryColor: newStore.primaryColor,
-        secondaryColor: newStore.secondaryColor,
-        textColor: newStore.textColor
+  // Mağaza güncelleme işlevi - Backend API ile
+  const handleUpdateStore = async () => {
+    if (!editingStore || !newStore.name || !newStore.selectedBrandId || !newStore.logoPreview) {
+      alert('Lütfen tüm zorunlu alanları doldurun')
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Oturum süreniz dolmuş, lütfen tekrar giriş yapın')
+        return
       }
 
-      // Mağaza listesinde güncelle
-      const updatedStoreList = storeList.map(store =>
-        store.id === editingStore.id ? updatedStore : store
-      )
-      setStoreList(updatedStoreList)
+      // 1. Slug oluştur (eğer name değiştiyse)
+      const slug = newStore.name !== editingStore.name
+        ? newStore.name
+            .toLowerCase()
+            .replace(/ğ/g, 'g')
+            .replace(/ü/g, 'u')
+            .replace(/ş/g, 's')
+            .replace(/ı/g, 'i')
+            .replace(/ö/g, 'o')
+            .replace(/ç/g, 'c')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+        : editingStore.slug
 
-      // Güncellenen mağaza seçili mağaza ise selectedStore'u da güncelle
+      // 2. Store'u güncelle
+      const updateData = {
+        name: newStore.name,
+        slug: slug,
+        description: newStore.description,
+        primary_color: newStore.primaryColor,
+        secondary_color: newStore.secondaryColor,
+        text_color: newStore.textColor
+      }
+
+      const updateResponse = await fetch(
+        `http://localhost:8000/api/v1/stores/${editingStore.id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updateData)
+        }
+      )
+
+      if (!updateResponse.ok) {
+        const error = await updateResponse.json()
+        throw new Error(error.detail || 'Store güncellenemedi')
+      }
+
+      const updatedStore = await updateResponse.json()
+
+      // 3. Logo değiştiyse yeni logo'yu yükle
+      if (newStore.logo && typeof newStore.logo !== 'string') {
+        const formData = new FormData()
+        formData.append('file', newStore.logo)
+
+        const uploadResponse = await fetch(
+          `http://localhost:8000/api/v1/stores/${editingStore.id}/logo/upload`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formData
+          }
+        )
+
+        if (uploadResponse.ok) {
+          const uploadResult = await uploadResponse.json()
+          updatedStore.logo = uploadResult.logo_url
+        }
+      }
+
+      // 4. Store listesini yeniden yükle
+      await loadStores()
+
+      // 5. Güncellenen mağaza seçili mağaza ise selectedStore'u da güncelle
       if (selectedStore && selectedStore.id === editingStore.id) {
-        setSelectedStore(updatedStore)
+        const transformedStore = {
+          ...updatedStore,
+          primaryColor: updatedStore.primary_color || updatedStore.primaryColor,
+          secondaryColor: updatedStore.secondary_color || updatedStore.secondaryColor,
+          textColor: updatedStore.text_color || updatedStore.textColor
+        }
+        setSelectedStore(transformedStore)
       }
 
       handleBackToStoreList()
+      alert('Mağaza başarıyla güncellendi!')
+    } catch (error) {
+      console.error('Store güncelleme hatası:', error)
+      alert(error.message || 'Mağaza güncellenirken bir hata oluştu')
     }
   }
 
@@ -456,17 +794,40 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     setOpenStoreDropdown(null)
   }
 
-  // Mağaza silme işlemini onayla
-  const confirmDeleteStore = () => {
-    if (storeToDelete) {
+  // Mağaza silme işlemini onayla - Backend API ile
+  const confirmDeleteStore = async () => {
+    if (!storeToDelete) return
+
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Oturum süreniz dolmuş, lütfen tekrar giriş yapın')
+        return
+      }
+
       // Çıkış animasyonunu başlat
       setIsCardClosing(true)
 
-      // Animasyon bitene kadar bekle, sonra silme işlemini yap
-      setTimeout(() => {
-        // Mağaza listesinden sil
-        const updatedStoreList = storeList.filter(store => store.id !== storeToDelete.id)
-        setStoreList(updatedStoreList)
+      // Backend'den sil
+      const deleteResponse = await fetch(
+        `http://localhost:8000/api/v1/stores/${storeToDelete.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+
+      if (!deleteResponse.ok) {
+        const error = await deleteResponse.json()
+        throw new Error(error.detail || 'Store silinemedi')
+      }
+
+      // Animasyon bitene kadar bekle, sonra UI'ı güncelle
+      setTimeout(async () => {
+        // Store listesini yeniden yükle
+        await loadStores()
 
         // Eğer silinen mağaza şu an seçili mağaza ise, seçimi temizle
         if (selectedStore && selectedStore.id === storeToDelete.id) {
@@ -486,6 +847,10 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
         setStoreToDelete(null)
         setIsCardClosing(false)
       }, 300) // Animasyon süresi kadar bekle
+    } catch (error) {
+      console.error('Store silme hatası:', error)
+      alert(error.message || 'Mağaza silinirken bir hata oluştu')
+      setIsCardClosing(false)
     }
   }
 
@@ -504,12 +869,18 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
   // Ürün düzenleme sayfasını aç
   const handleEditProduct = (product) => {
+    console.log('✏️ Ürün düzenleniyor:', {
+      product,
+      description: product.description,
+      reviewCount: product.reviewCount
+    })
+
     setEditingProduct(product)
     setNewProduct({
       name: product.name,
       price: product.price,
       category: product.category,
-      description: product.description,
+      description: product.description || '',
       reviewCount: product.reviewCount || 0, // Mevcut yorum sayısını al, yoksa 0
       images: [],
       imagePreviews: product.images || [product.image] // Mevcut görselleri yükle
@@ -572,8 +943,9 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
   // Eğer bir ürün seçildiyse ürün detayını göster
   if (selectedProduct && selectedStore) {
-    const reviews = reviewsList[selectedProduct.id] || []
-    
+    // productReviews state'inden yorumları al
+    const reviews = productReviews
+
     return (
       <div className="relative">
         
@@ -686,10 +1058,14 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
               </div>
 
               {/* Yorumlar Bölümü */}
-              {reviews.length > 0 && (
-                <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
-                  <h3 className="text-lg sm:text-xl font-bold text-[#1F1F1F] mb-3 sm:mb-4">Müşteri Yorumları</h3>
-                  
+              <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
+                <h3 className="text-lg sm:text-xl font-bold text-[#1F1F1F] mb-3 sm:mb-4">Müşteri Yorumları</h3>
+
+                {isLoadingReviews ? (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-[#666]">Yorumlar yükleniyor...</p>
+                  </div>
+                ) : reviews.length > 0 ? (
                   <div className="space-y-3 sm:space-y-4">
                     {reviews.map((review) => (
                       <div key={review.id} className="border-b border-gray-100 pb-3 sm:pb-4 last:border-b-0">
@@ -726,8 +1102,12 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-[#666]">Henüz yorum yapılmamış.</p>
+                  </div>
+                )}
+              </div>
 
               {/* Sepete Ekle Butonu */}
               <button 
@@ -751,24 +1131,27 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
         </div>
 
         {/* Chatbox Component - Sağ Alt Köşe */}
-        <div className="fixed bottom-6 right-6 z-50">
-          <VirtualStoreChatboxAndButtons
-            chatboxTitle={`${selectedStore.name} Asistanı`}
-            initialMessage={`Merhaba! ${selectedProduct.name} hakkında size nasıl yardımcı olabilirim?`}
-            colors={{
-              primary: selectedStore.primaryColor,
-              aiMessage: '#E5E7EB',
-              userMessage: selectedStore.primaryColor,
-              borderColor: selectedStore.primaryColor,
-              aiTextColor: '#1F2937',
-              userTextColor: '#FFFFFF',
-              buttonPrimary: selectedStore.primaryColor,
-              buttonIcon: '#FFFFFF'
-            }}
-            isVisible={isChatboxVisible}
-            onToggle={() => setIsChatboxVisible(!isChatboxVisible)}
-          />
-        </div>
+        {/* NOT: Yeni oluşturulan mağazalarda chatbox gösterilmiyor - sonradan etkinleştirilecek */}
+        {false && (
+          <div className="fixed bottom-6 right-6 z-50">
+            <VirtualStoreChatboxAndButtons
+              chatboxTitle={`${selectedStore.name} Asistanı`}
+              initialMessage={`Merhaba! ${selectedProduct.name} hakkında size nasıl yardımcı olabilirim?`}
+              colors={{
+                primary: selectedStore.primaryColor,
+                aiMessage: '#E5E7EB',
+                userMessage: selectedStore.primaryColor,
+                borderColor: selectedStore.primaryColor,
+                aiTextColor: '#1F2937',
+                userTextColor: '#FFFFFF',
+                buttonPrimary: selectedStore.primaryColor,
+                buttonIcon: '#FFFFFF'
+              }}
+              isVisible={isChatboxVisible}
+              onToggle={() => setIsChatboxVisible(!isChatboxVisible)}
+            />
+          </div>
+        )}
 
       </div>
     )
@@ -853,22 +1236,29 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 />
               </div>
 
-              {/* Satış Platformu */}
+              {/* Mağaza Seçimi (Brand Selection) */}
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-[#1F1F1F] mb-1 sm:mb-2">
-                  Satış Platformu
+                  Mağaza Seçimi
                 </label>
-                <div className="relative" ref={platformDropdownRef}>
+                <div className="relative" ref={brandDropdownRef}>
                   <button
                     type="button"
-                    onClick={() => setIsPlatformDropdownOpen(!isPlatformDropdownOpen)}
+                    onClick={() => setIsBrandDropdownOpen(!isBrandDropdownOpen)}
                     className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-gray-900 bg-white text-left flex items-center justify-between text-sm sm:text-base"
+                    disabled={isLoadingBrands}
                   >
-                    <span className={newStore.platform ? 'text-gray-900' : 'text-gray-500'}>
-                      {newStore.platform || 'Satış platformunu seçin'}
+                    <span className={newStore.selectedBrandId ? 'text-gray-900' : 'text-gray-500'}>
+                      {newStore.selectedBrandId
+                        ? brands.find(b => b.id === newStore.selectedBrandId)?.name || 'Mağaza seçin'
+                        : isLoadingBrands
+                          ? 'Mağazalar yükleniyor...'
+                          : brands.length === 0
+                            ? 'Mağaza bulunamadı'
+                            : 'Mağaza seçin'}
                     </span>
                     <svg
-                      className={`w-4 sm:w-5 h-4 sm:h-5 text-gray-400 transition-transform ${isPlatformDropdownOpen ? 'rotate-180' : ''}`}
+                      className={`w-4 sm:w-5 h-4 sm:h-5 text-gray-400 transition-transform ${isBrandDropdownOpen ? 'rotate-180' : ''}`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -876,33 +1266,65 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  
-                  {isPlatformDropdownOpen && (
+
+                  {isBrandDropdownOpen && !isLoadingBrands && brands.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
-                      {platformOptions.map((platform) => (
+                      {brands.map((brand) => (
                         <button
-                          key={platform}
+                          key={brand.id}
                           type="button"
                           onClick={() => {
-                            const colors = platformColors[platform]
-                            setNewStore({
-                              ...newStore, 
-                              platform: platform,
-                              primaryColor: colors.primaryColor,
-                              secondaryColor: colors.secondaryColor,
-                              textColor: colors.textColor
-                            })
-                            setIsPlatformDropdownOpen(false)
+                            // Yeni store objesi oluştur
+                            const updatedStore = {
+                              ...newStore,
+                              selectedBrandId: brand.id,
+                            }
+
+                            // Sadece boş veya default değerleri doldur
+                            // Kullanıcı manuel değiştirdiyse, üzerine yazma
+                            if (!newStore.name || newStore.name === '') {
+                              updatedStore.name = brand.name
+                            }
+
+                            if (newStore.primaryColor === '#6434F8') {
+                              updatedStore.primaryColor = brand.theme_color || '#6434F8'
+                            }
+
+                            if (newStore.secondaryColor === '#7D56F9') {
+                              updatedStore.secondaryColor = brand.theme_color || '#7D56F9'
+                            }
+
+                            setNewStore(updatedStore)
+                            setIsBrandDropdownOpen(false)
                           }}
-                          className="w-full px-3 sm:px-4 py-2 sm:py-3 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none transition-colors text-gray-900 border-b border-gray-100 last:border-b-0 text-sm sm:text-base"
+                          className="w-full px-3 sm:px-4 py-2 sm:py-3 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none transition-colors text-gray-900 border-b border-gray-100 last:border-b-0 text-sm sm:text-base flex items-center space-x-2"
                         >
-                          {platform}
+                          {/* Brand logo varsa göster */}
+                          {brand.logo_url && (
+                            <img
+                              src={brand.logo_url}
+                              alt={brand.name}
+                              className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium">{brand.name}</div>
+                            {brand.description && (
+                              <div className="text-xs text-gray-500 truncate">{brand.description}</div>
+                            )}
+                          </div>
+                          {brand.is_active && (
+                            <span className="flex-shrink-0 w-2 h-2 rounded-full bg-green-500"></span>
+                          )}
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-[#666] mt-1">Mağazanızın satış yaptığı platformu seçin</p>
+                <p className="text-xs text-[#666] mt-1">Profil'den oluşturduğunuz markalardan birini seçin</p>
+                {brands.length === 0 && !isLoadingBrands && (
+                  <p className="text-xs text-red-500 mt-1">Henüz mağaza oluşturmadınız. Önce Profil sayfasından mağaza ekleyin.</p>
+                )}
               </div>
 
               {/* Logo Yükleme */}
@@ -968,10 +1390,10 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   {/* Ana Renk */}
                   <div className="flex flex-col space-y-1.5 sm:space-y-2 relative flex-1">
                     <label className="block text-xs text-[#666] mb-1 sm:mb-2">Ana Renk</label>
-                    <div 
+                    <div
                       className="flex items-center space-x-2 bg-white rounded-lg sm:rounded-xl shadow-sm p-2 sm:p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => newStore.platform === 'Kendi Web Sitem' && toggleColorPicker('primaryColor')}
-                      data-color-button={newStore.platform === 'Kendi Web Sitem' ? true : undefined}
+                      onClick={() => toggleColorPicker('primaryColor')}
+                      data-color-button
                     >
                       <div className="w-6 sm:w-7 lg:w-8 h-6 sm:h-7 lg:h-8 bg-gradient-to-br from-gray-50 to-gray-100 rounded-md sm:rounded-lg flex items-center justify-center text-xs sm:text-sm border border-gray-200">
                         🎨
@@ -983,7 +1405,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                         ></div>
                       </div>
                     </div>
-                    {activeColorPicker === 'primaryColor' && newStore.platform === 'Kendi Web Sitem' && (
+                    {activeColorPicker === 'primaryColor' && (
                       <div ref={(el) => colorPickerRefs.current['primaryColor'] = el} className="absolute top-full left-0 z-50 mt-2">
                         <SketchPicker
                           color={newStore.primaryColor}
@@ -996,10 +1418,10 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   {/* İkincil Renk */}
                   <div className="flex flex-col space-y-1.5 sm:space-y-2 relative flex-1">
                     <label className="block text-xs text-[#666] mb-1 sm:mb-2">İkincil Renk</label>
-                    <div 
+                    <div
                       className="flex items-center space-x-2 bg-white rounded-lg sm:rounded-xl shadow-sm p-2 sm:p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => newStore.platform === 'Kendi Web Sitem' && toggleColorPicker('secondaryColor')}
-                      data-color-button={newStore.platform === 'Kendi Web Sitem' ? true : undefined}
+                      onClick={() => toggleColorPicker('secondaryColor')}
+                      data-color-button
                     >
                       <div className="w-6 sm:w-7 lg:w-8 h-6 sm:h-7 lg:h-8 bg-gradient-to-br from-gray-50 to-gray-100 rounded-md sm:rounded-lg flex items-center justify-center text-xs sm:text-sm border border-gray-200">
                         🎨
@@ -1011,7 +1433,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                         ></div>
                       </div>
                     </div>
-                    {activeColorPicker === 'secondaryColor' && newStore.platform === 'Kendi Web Sitem' && (
+                    {activeColorPicker === 'secondaryColor' && (
                       <div ref={(el) => colorPickerRefs.current['secondaryColor'] = el} className="absolute top-full left-0 z-50 mt-2">
                         <SketchPicker
                           color={newStore.secondaryColor}
@@ -1024,10 +1446,10 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   {/* Yazı Rengi */}
                   <div className="flex flex-col space-y-1.5 sm:space-y-2 relative flex-1">
                     <label className="block text-xs text-[#666] mb-1 sm:mb-2">Yazı Rengi</label>
-                    <div 
+                    <div
                       className="flex items-center space-x-2 bg-white rounded-lg sm:rounded-xl shadow-sm p-2 sm:p-3 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => newStore.platform === 'Kendi Web Sitem' && toggleColorPicker('textColor')}
-                      data-color-button={newStore.platform === 'Kendi Web Sitem' ? true : undefined}
+                      onClick={() => toggleColorPicker('textColor')}
+                      data-color-button
                     >
                       <div className="w-6 sm:w-7 lg:w-8 h-6 sm:h-7 lg:h-8 bg-gradient-to-br from-gray-50 to-gray-100 rounded-md sm:rounded-lg flex items-center justify-center text-xs sm:text-sm border border-gray-200">
                         🎨
@@ -1039,7 +1461,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                         ></div>
                       </div>
                     </div>
-                    {activeColorPicker === 'textColor' && newStore.platform === 'Kendi Web Sitem' && (
+                    {activeColorPicker === 'textColor' && (
                       <div ref={(el) => colorPickerRefs.current['textColor'] = el} className="absolute top-full left-0 z-50 mt-2">
                         <SketchPicker
                           color={newStore.textColor}
@@ -1063,16 +1485,16 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 <button
                   onClick={showEditStorePage ? handleUpdateStore : handleCreateStore}
                   disabled={showEditStorePage
-                    ? (!newStore.name || !newStore.platform || !newStore.logoPreview ||
+                    ? (!newStore.name || !newStore.selectedBrandId || !newStore.logoPreview ||
                        (editingStore &&
                         newStore.name === editingStore.name &&
                         newStore.description === (editingStore.description || '') &&
-                        newStore.platform === editingStore.platform &&
+                        newStore.selectedBrandId === editingStore.brand_id &&
                         newStore.logoPreview === editingStore.logo &&
                         newStore.primaryColor === editingStore.primaryColor &&
                         newStore.secondaryColor === editingStore.secondaryColor &&
                         newStore.textColor === editingStore.textColor))
-                    : (!newStore.name || !newStore.description || !newStore.platform || !newStore.logoPreview)
+                    : (!newStore.name || !newStore.description || !newStore.selectedBrandId || !newStore.logoPreview)
                   }
                   className="flex-1 px-4 sm:px-6 py-2 sm:py-3 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                   style={{
@@ -1154,7 +1576,9 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     <h3 className="text-xs sm:text-sm lg:text-base font-bold mb-0.5 sm:mb-1 truncate" style={{ color: newStore.textColor }}>
                       {newStore.name || 'Mağaza İsmi'}
                     </h3>
-                    <p className="text-xs sm:text-xs mb-1 sm:mb-1.5 lg:mb-2 truncate" style={{ color: `${newStore.textColor}80` }}>{newStore.platform || 'Platform'} Platform</p>
+                    <p className="text-xs sm:text-xs mb-1 sm:mb-1.5 lg:mb-2 truncate" style={{ color: `${newStore.textColor}80` }}>
+                      {newStore.selectedBrandId ? brands.find(b => b.id === newStore.selectedBrandId)?.name || 'Marka' : 'Marka'} Mağazası
+                    </p>
                     <div className="inline-flex px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium bg-white/20 backdrop-blur-sm" style={{ color: newStore.textColor }}>
                       <span className="hidden sm:inline">Aktif Çalışıyor</span>
                       <span className="sm:hidden">Aktif</span>
@@ -1466,22 +1890,21 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   İptal
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (selectedStore && newProduct.name && newProduct.price && newProduct.category && newProduct.description && newProduct.imagePreviews.length > 0) {
 
                       if (showEditProductPage && editingProduct) {
-                        // Ürün düzenleme işlemi
+                        // Ürün düzenleme işlemi (Henüz backend ile entegre edilmedi)
                         const updatedProduct = {
                           ...editingProduct,
                           name: newProduct.name,
                           price: newProduct.price,
                           category: newProduct.category,
                           description: newProduct.description,
-                          image: newProduct.imagePreviews[0], // Ana görsel
-                          images: newProduct.imagePreviews, // Tüm görseller
+                          image: newProduct.imagePreviews[0],
+                          images: newProduct.imagePreviews,
                         }
 
-                        // Ürünü products state'inde güncelle
                         setProducts(prev => ({
                           ...prev,
                           [selectedStore.id]: prev[selectedStore.id].map(product =>
@@ -1492,58 +1915,62 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                         console.log('Ürün güncellendi:', updatedProduct, 'Mağaza:', selectedStore.name)
 
                       } else {
-                        // Yeni ürün ekleme işlemi
-                        // Seçilen sayı kadar hazır yorum oluştur
-                        const selectedReviews = newProduct.reviewCount > 0
-                          ? sampleReviews.slice(0, newProduct.reviewCount).map((review, index) => ({
-                              ...review,
-                              id: Date.now() + index
-                            }))
-                          : []
+                        // Yeni ürün ekleme işlemi - Backend ile entegre
+                        try {
+                          setIsCreatingProduct(true)
 
-                        // Ortalama rating hesapla (yorumlar varsa)
-                        const averageRating = selectedReviews.length > 0
-                          ? selectedReviews.reduce((sum, review) => sum + review.rating, 0) / selectedReviews.length
-                          : 4.5
+                          // Slug oluştur
+                          const slug = generateSlug(newProduct.name)
 
-                        // Yeni ürün oluştur
-                        const newProductData = {
-                          id: Date.now(), // Unique ID için timestamp kullan
-                          name: newProduct.name,
-                          price: newProduct.price,
-                          category: newProduct.category,
-                          description: newProduct.description,
-                          image: newProduct.imagePreviews[0], // Ana görsel
-                          images: newProduct.imagePreviews, // Tüm görseller
-                          rating: Math.round(averageRating * 10) / 10 // Rating'i yuvarla
+                          // Fiyatı sayıya çevir (₺ işaretini ve formatlamayı kaldır)
+                          const priceValue = parseFloat(newProduct.price.replace(/[^0-9.]/g, ''))
+
+                          // Backend'e ürün oluşturma isteği gönder
+                          const productData = {
+                            store_id: selectedStore.id,
+                            name: newProduct.name,
+                            slug: slug,
+                            description: newProduct.description,
+                            price: priceValue,
+                            category: newProduct.category,
+                            initial_review_count: newProduct.reviewCount,
+                            status: 'active',
+                            stock_quantity: 100
+                          }
+
+                          const createdProduct = await createProduct(productData)
+                          console.log('Backend\'de ürün oluşturuldu:', createdProduct)
+
+                          // Görselleri yükle
+                          if (newProduct.images.length > 0) {
+                            try {
+                              const uploadResult = await uploadProductImages(
+                                createdProduct.id,
+                                newProduct.images
+                              )
+                              console.log('Görseller yüklendi:', uploadResult)
+                            } catch (uploadError) {
+                              console.error('Görsel yükleme hatası:', uploadError)
+                              alert('Ürün oluşturuldu ancak görseller yüklenirken bir hata oluştu.')
+                            }
+                          }
+
+                          // Mağazanın tüm ürünlerini backend'den yeniden yükle
+                          await loadStoreProducts(selectedStore.id)
+
+                          alert('Ürün başarıyla oluşturuldu!')
+                          handleBackToProductList()
+
+                        } catch (error) {
+                          console.error('Ürün oluşturma hatası:', error)
+                          alert(`Ürün oluşturulurken bir hata oluştu: ${error.message}`)
+                        } finally {
+                          setIsCreatingProduct(false)
                         }
-
-                        // Ürünü seçili mağazanın ürün listesine ekle
-                        setProducts(prev => ({
-                          ...prev,
-                          [selectedStore.id]: [
-                            ...(prev[selectedStore.id] || []),
-                            newProductData
-                          ]
-                        }))
-
-                        // Eğer yorum varsa, yorumları da ekle
-                        if (selectedReviews.length > 0) {
-                          // reviewsList'e de ekle (ürün detay sayfasında görünmesi için)
-                          const currentReviews = { ...reviewsList }
-                          currentReviews[newProductData.id] = selectedReviews
-                          // Bu normalde bir state olmalı ama şimdilik global değişken kullanıyoruz
-                          Object.assign(reviewsList, currentReviews)
-                        }
-
-                        console.log('Yeni ürün oluşturuldu:', newProductData, 'Mağaza:', selectedStore.name, 'Yorumlar:', selectedReviews)
                       }
-
-                      // Form'u temizle ve mağaza detay sayfasına dön
-                      handleBackToProductList()
                     }
                   }}
-                  disabled={showEditProductPage
+                  disabled={isCreatingProduct || (showEditProductPage
                     ? (!newProduct.name || !newProduct.price || !newProduct.category || !newProduct.description || newProduct.imagePreviews.length === 0 ||
                        (editingProduct &&
                         newProduct.name === editingProduct.name &&
@@ -1552,7 +1979,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                         newProduct.description === editingProduct.description &&
                         newProduct.reviewCount === (editingProduct.reviewCount || 0) &&
                         JSON.stringify(newProduct.imagePreviews) === JSON.stringify(editingProduct.images || [editingProduct.image])))
-                    : (!newProduct.name || !newProduct.price || !newProduct.category || !newProduct.description || newProduct.imagePreviews.length === 0)
+                    : (!newProduct.name || !newProduct.price || !newProduct.category || !newProduct.description || newProduct.imagePreviews.length === 0))
                   }
                   className="flex-1 px-4 sm:px-6 py-2 sm:py-3 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                   style={{
@@ -1569,7 +1996,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
-                  {showEditProductPage ? 'Değişiklikleri Kaydet' : 'Ürünü Oluştur'}
+                  {isCreatingProduct ? 'Ürün oluşturuluyor...' : (showEditProductPage ? 'Değişiklikleri Kaydet' : 'Ürünü Oluştur')}
                 </button>
               </div>
 
@@ -1726,7 +2153,9 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
               {/* Mağaza Bilgileri */}
               <div>
                 <h2 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold" style={{ color: selectedStore.textColor || '#FFFFFF' }}>{selectedStore.name}</h2>
-                <p className="text-xs sm:text-sm md:text-base" style={{ color: `${selectedStore.textColor || '#FFFFFF'}80` }}>{selectedStore.platform} Platform</p>
+                <p className="text-xs sm:text-sm md:text-base" style={{ color: `${selectedStore.textColor || '#FFFFFF'}80` }}>
+                  {selectedStore.brand_id ? brands.find(b => b.id === selectedStore.brand_id)?.name || 'Marka' : 'Marka'} Mağazası
+                </p>
               </div>
             </div>
 
@@ -1760,7 +2189,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                       e.stopPropagation() // Kartın onClick'ini engelle
                       setOpenProductDropdown(openProductDropdown === product.id ? null : product.id)
                     }}
-                    className="p-1 rounded-full hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
+                    className="p-1 rounded-full bg-white/80 hover:bg-white shadow-sm backdrop-blur-sm transition-all"
                   >
                     <MoreHorizontal className="w-4 h-4 text-gray-600" />
                   </button>
@@ -1946,24 +2375,27 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
         )}
 
         {/* Chatbox Component - Sağ Alt Köşe */}
-        <div className="fixed bottom-6 right-6 z-50">
-          <VirtualStoreChatboxAndButtons
-            chatboxTitle={`${selectedStore.name} Asistanı`}
-            initialMessage={`Merhaba! ${selectedStore.name} mağazasına hoş geldiniz. Size nasıl yardımcı olabilirim?`}
-            colors={{
-              primary: selectedStore.primaryColor,
-              aiMessage: '#E5E7EB',
-              userMessage: selectedStore.primaryColor,
-              borderColor: selectedStore.primaryColor,
-              aiTextColor: '#1F2937',
-              userTextColor: '#FFFFFF',
-              buttonPrimary: selectedStore.primaryColor,
-              buttonIcon: '#FFFFFF'
-            }}
-            isVisible={isChatboxVisible}
-            onToggle={() => setIsChatboxVisible(!isChatboxVisible)}
-          />
-        </div>
+        {/* NOT: Yeni oluşturulan mağazalarda chatbox gösterilmiyor - sonradan etkinleştirilecek */}
+        {false && (
+          <div className="fixed bottom-6 right-6 z-50">
+            <VirtualStoreChatboxAndButtons
+              chatboxTitle={`${selectedStore.name} Asistanı`}
+              initialMessage={`Merhaba! ${selectedStore.name} mağazasına hoş geldiniz. Size nasıl yardımcı olabilirim?`}
+              colors={{
+                primary: selectedStore.primaryColor,
+                aiMessage: '#E5E7EB',
+                userMessage: selectedStore.primaryColor,
+                borderColor: selectedStore.primaryColor,
+                aiTextColor: '#1F2937',
+                userTextColor: '#FFFFFF',
+                buttonPrimary: selectedStore.primaryColor,
+                buttonIcon: '#FFFFFF'
+              }}
+              isVisible={isChatboxVisible}
+              onToggle={() => setIsChatboxVisible(!isChatboxVisible)}
+            />
+          </div>
+        )}
 
       </div>
     )
@@ -1971,7 +2403,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
   return (
     <div className="relative">
-      
+
       {/* Mağaza Kartları Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mx-3 sm:mx-6 lg:mx-12 xl:mx-20 mt-3 sm:mt-4 lg:mt-5">
         {storeList.map((store, index) => (
@@ -1979,23 +2411,15 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
             key={store.id}
             onClick={() => handleStoreClick(store)}
             className={`rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] hover:shadow-[0px_12px_32px_rgba(100,52,248,0.12)] hover:scale-105 group border border-transparent hover:border-[#6434F8]/20 cursor-pointer ${getCardAnimation(index)}`}
-            style={{ 
-              background: `linear-gradient(135deg, ${store.primaryColor}, ${store.secondaryColor})`,
+            style={{
+              background: `linear-gradient(135deg, ${store.primary_color || store.primaryColor || '#6434F8'}, ${store.secondary_color || store.secondaryColor || '#7D56F9'})`,
               animationDelay: getAnimationDelay(index),
               height: '160px'
             }}
           >
             {/* Header */}
             <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
-              <div className="flex items-center space-x-1 sm:space-x-1.5">
-                <div className={`w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full ${store.status === 'active' ? 'bg-white' : 'bg-white/50'}`}></div>
-                {index === 0 && (
-                  <div className="bg-white/20 backdrop-blur-sm px-1 sm:px-1.5 py-0.5 rounded-full">
-                    <span className="text-xs font-bold text-white hidden sm:inline">ANA TEMA</span>
-                    <span className="text-xs font-bold text-white sm:hidden">ANA</span>
-                  </div>
-                )}
-              </div>
+              <div></div>
               <div className="flex items-center space-x-0.5 sm:space-x-1">
                 {index !== 0 && (
                   <button
@@ -2070,13 +2494,15 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
               {/* Mağaza Bilgileri */}
               <div className="flex-1 min-w-0">
-                <h3 className="text-xs sm:text-sm lg:text-base font-bold mb-0.5 sm:mb-1 truncate" style={{ color: store.textColor || '#FFFFFF' }}>{store.name}</h3>
-                <p className="text-xs sm:text-xs mb-1 sm:mb-1.5 lg:mb-2 truncate" style={{ color: `${store.textColor || '#FFFFFF'}80` }}>{store.platform} Platform</p>
+                <h3 className="text-xs sm:text-sm lg:text-base font-bold mb-0.5 sm:mb-1 truncate" style={{ color: store.text_color || store.textColor || '#FFFFFF' }}>{store.name}</h3>
+                <p className="text-xs sm:text-xs mb-1 sm:mb-1.5 lg:mb-2 truncate" style={{ color: `${store.text_color || store.textColor || '#FFFFFF'}80` }}>
+                  {store.brand_id ? brands.find(b => b.id === store.brand_id)?.name || 'Marka' : 'Marka'} Mağazası
+                </p>
                 <div className={`inline-flex px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium ${
-                  store.status === 'active' 
-                    ? 'bg-white/20 backdrop-blur-sm' 
+                  store.status === 'active'
+                    ? 'bg-white/20 backdrop-blur-sm'
                     : 'bg-white/10 backdrop-blur-sm'
-                }`} style={{ color: store.textColor || '#FFFFFF' }}>
+                }`} style={{ color: store.text_color || store.textColor || '#FFFFFF' }}>
                   <span className="hidden sm:inline">{store.status === 'active' ? 'Aktif Çalışıyor' : 'Aktif Çalışmıyor'}</span>
                   <span className="sm:hidden">{store.status === 'active' ? 'Aktif' : 'Pasif'}</span>
                 </div>

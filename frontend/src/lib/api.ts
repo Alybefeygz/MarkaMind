@@ -115,6 +115,7 @@ export interface ProductListItem {
   store_id: string
   name: string
   slug: string
+  description: string | null
   price: string
   compare_at_price: string | null
   category: string

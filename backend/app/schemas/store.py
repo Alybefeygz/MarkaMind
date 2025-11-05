@@ -74,6 +74,8 @@ class StoreList(BaseModel):
     platform: Optional[str] = None
     primary_color: str
     secondary_color: str
+    text_color: str
+    description: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

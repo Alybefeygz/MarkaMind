@@ -9,30 +9,10 @@ import Profile from '@/components/Profile'
 import { Menu, ChevronDown, Plus, MessageSquare, LogOut } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { DEFAULT_THEME } from '@/lib/theme'
 
-// Kullanıcının mağaza verileri - ana state olarak taşındı
-const initialStoreList = [
-  { 
-    id: 1, 
-    name: 'TechMall Store', 
-    logo: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=100&h=100&fit=crop&crop=center',
-    status: 'active',
-    platform: 'Trendyol',
-    primaryColor: '#FF6925',
-    secondaryColor: '#FFBF31',
-    textColor: '#FFFFFF'
-  },
-  { 
-    id: 2, 
-    name: 'Digital Market', 
-    logo: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=100&h=100&fit=crop&crop=center',
-    status: 'inactive',
-    platform: 'Amazon',
-    primaryColor: '#232F3E',
-    secondaryColor: '#FF9900',
-    textColor: '#FFFFFF'
-  }
-]
+// Kullanıcının mağaza verileri - Backend'den yüklenecek (mock veriler kaldırıldı)
+const initialStoreList = []
 
 export default function Home() {
   const router = useRouter()
@@ -42,15 +22,11 @@ export default function Home() {
   const [isAnimating, setIsAnimating] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   
-  // Mağaza listesi state'i - dinamik tema için
+  // Mağaza listesi state'i
   const [storeList, setStoreList] = useState(initialStoreList)
-  
-  // İlk mağazanın tema renklerini dinamik olarak al
-  const themeColors = {
-    primary: storeList[0]?.primaryColor || '#FF6925',
-    secondary: storeList[0]?.secondaryColor || '#FFBF31',
-    text: storeList[0]?.textColor || '#FFFFFF'
-  }
+
+  // Sabit tema - TÜM sayfalar için (VirtualStore dahil)
+  const themeColors = DEFAULT_THEME
   
   // Chatbox dropdown state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -171,9 +147,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F9F9FB] font-sans">
-      {/* Sidebar */}
-      <Sidebar 
-        onTitleChange={setPageTitle} 
+      {/* Sidebar - Sabit tema kullan */}
+      <Sidebar
+        onTitleChange={setPageTitle}
         onPageChange={handlePageChange}
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -388,7 +364,7 @@ export default function Home() {
           
           {/* Sayfa İçerikleri */}
           {showHomePage && (
-            <HomePage 
+            <HomePage
               shouldExit={isAnimating}
               onAnimationComplete={handleAnimationComplete}
               isActive={currentPage === 0}

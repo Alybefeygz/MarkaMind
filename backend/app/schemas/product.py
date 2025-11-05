@@ -104,6 +104,7 @@ class ProductList(BaseModel):
     store_id: UUID
     name: str
     slug: str
+    description: Optional[str] = None
     price: Decimal
     compare_at_price: Optional[Decimal] = None
     category: str

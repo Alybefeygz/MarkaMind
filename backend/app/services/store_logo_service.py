@@ -23,16 +23,16 @@ class StoreLogoService:
 
     def __init__(self):
         # Supabase client initialization
-        if not settings.supabase_url or not settings.supabase_api_key:
+        if not settings.SUPABASE_URL or not settings.SUPABASE_API_KEY:
             raise ValueError("Supabase credentials not found")
 
         self.client: Client = create_client(
-            settings.supabase_url,
-            settings.supabase_api_key
+            settings.SUPABASE_URL,
+            settings.SUPABASE_API_KEY
         )
-        self.bucket_name = settings.store_logo_bucket
-        self.base_url = settings.store_logo_base_url or \
-            f"{settings.supabase_url}/storage/v1/object/public/{self.bucket_name}/"
+        self.bucket_name = settings.STORE_LOGO_BUCKET
+        self.base_url = settings.STORE_LOGO_BASE_URL or \
+            f"{settings.SUPABASE_URL}/storage/v1/object/public/{self.bucket_name}/"
 
         # Configuration
         self.allowed_extensions = {'jpg', 'jpeg', 'png', 'svg', 'webp'}
