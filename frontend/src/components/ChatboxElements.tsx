@@ -1,7 +1,7 @@
 'use client'
 
 import { MessageSquare, Send } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface ChatboxElementsProps {
   chatboxTitle?: string
@@ -53,6 +53,21 @@ export default function ChatboxElements({
   const [messages, setMessages] = useState<Message[]>([
     { id: 1, text: initialMessage, sender: 'bot', timestamp: new Date() }
   ])
+
+  // initialMessage prop'u değiştiğinde ilk mesajı güncelle
+  useEffect(() => {
+    setMessages(prevMessages => {
+      // Sadece ilk mesajı (bot mesajını) güncelle, kullanıcı mesajlarını koru
+      const updatedMessages = [...prevMessages]
+      if (updatedMessages.length > 0 && updatedMessages[0].sender === 'bot') {
+        updatedMessages[0] = {
+          ...updatedMessages[0],
+          text: initialMessage
+        }
+      }
+      return updatedMessages
+    })
+  }, [initialMessage])
 
   const handleSendMessage = () => {
     if (message.trim()) {

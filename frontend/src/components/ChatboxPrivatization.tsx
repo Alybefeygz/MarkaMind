@@ -1,58 +1,51 @@
 'use client'
 
-import { ChevronDown, Plus, MessageSquare, Settings, Trash2, Eye, ArrowLeft, Send, User, Home, Bot, Zap, Palette, Undo2, Save } from 'lucide-react'
+import { ChevronDown, Plus, MessageSquare, Settings, Trash2, Eye, ArrowLeft, Send, User, Home, Bot, Zap, Palette, Save } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { SketchPicker } from 'react-color'
 import ChatboxElements from './ChatboxElements'
 
-// Örnek chatbox verileri
-const chatboxList = [
-  { id: 1, name: 'Zzen Chatbox', status: 'active', messages: 1247 },
-  { id: 2, name: 'Imuntus Kids Chatbox', status: 'active', messages: 890 },
-  { id: 3, name: 'Mag4ever Chatbox', status: 'inactive', messages: 456 }
-]
-
-export default function ChatboxPrivatization({ themeColors }) {
+export default function ChatboxPrivatization({ selectedChatbox, themeColors, isCreatingNew, onCancelCreate, chatboxData, setChatboxData }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const [selectedChatbox, setSelectedChatbox] = useState(chatboxList[0])
   const [isChatboxVisible, setIsChatboxVisible] = useState(true)
-  const [message, setMessage] = useState('')
-  const [messages, setMessages] = useState([
-    { id: 1, text: 'Hello! It\'s Orbina here!', sender: 'bot', timestamp: new Date() }
-  ])
+  const [isLoadingChatboxData, setIsLoadingChatboxData] = useState(!isCreatingNew && selectedChatbox?.id ? true : false)
+
   const [colors, setColors] = useState({
-    primary: '#7B4DFA',
-    aiMessage: '#E5E7EB',
-    userMessage: '#7B4DFA',
-    borderColor: '#B794F6',
-    aiTextColor: '#1F2937',
-    userTextColor: '#FFFFFF',
-    buttonPrimary: '#7B4DFA',
-    buttonBorderColor: '#B794F6',
-    buttonIcon: '#FFFFFF'
+    primary: '',
+    aiMessage: '',
+    userMessage: '',
+    borderColor: '',
+    aiTextColor: '',
+    userTextColor: '',
+    buttonPrimary: '',
+    buttonBorderColor: '',
+    buttonIcon: ''
   })
   const [tempColors, setTempColors] = useState({
-    primary: '#7B4DFA',
-    aiMessage: '#E5E7EB',
-    userMessage: '#7B4DFA',
-    borderColor: '#B794F6',
-    aiTextColor: '#1F2937',
-    userTextColor: '#FFFFFF',
-    buttonPrimary: '#7B4DFA',
-    buttonBorderColor: '#B794F6',
-    buttonIcon: '#FFFFFF'
+    primary: '',
+    aiMessage: '',
+    userMessage: '',
+    borderColor: '',
+    aiTextColor: '',
+    userTextColor: '',
+    buttonPrimary: '',
+    buttonBorderColor: '',
+    buttonIcon: ''
   })
-  
+
   // Başlık state'leri
-  const [chatboxTitle, setChatboxTitle] = useState('Zzen Chatbox')
-  const [chatboxInitialMessage, setChatboxInitialMessage] = useState("Hello! It's Orbina here!")
-  const [tempChatboxTitle, setTempChatboxTitle] = useState('Zzen Chatbox')
-  const [tempChatboxInitialMessage, setTempChatboxInitialMessage] = useState("Hello! It's Orbina here!")
-  
-  
-  // Değişiklik takibi
+  const [chatboxName, setChatboxName] = useState('')
+  const [chatboxTitle, setChatboxTitle] = useState('')
+  const [chatboxInitialMessage, setChatboxInitialMessage] = useState('')
+  const [tempChatboxName, setTempChatboxName] = useState('')
+  const [tempChatboxTitle, setTempChatboxTitle] = useState('')
+  const [tempChatboxInitialMessage, setTempChatboxInitialMessage] = useState('')
+
+  // Değişiklik tracking için state
   const [hasChanges, setHasChanges] = useState(false)
-  
+
+
   // Color picker modal states
   const [activeColorPicker, setActiveColorPicker] = useState(null)
   
@@ -62,6 +55,9 @@ export default function ChatboxPrivatization({ themeColors }) {
   // Animasyon state'leri
   const [isVisible, setIsVisible] = useState(false)
 
+  // Portal container için state
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
+
   // Sayfa yüklendiğinde animasyonu başlat
   useEffect(() => {
     setIsVisible(false)
@@ -70,6 +66,128 @@ export default function ChatboxPrivatization({ themeColors }) {
     }, 100)
     return () => clearTimeout(timer)
   }, [])
+
+  // Portal container'ı bul
+  useEffect(() => {
+    const container = document.getElementById('chatbox-save-buttons-container')
+    setPortalContainer(container)
+  }, [])
+
+  // Backend'den seçili chatbox verilerini yükle
+  useEffect(() => {
+    const loadChatboxDetails = async () => {
+      if (selectedChatbox?.id && !isCreatingNew) {
+        setIsLoadingChatboxData(true)
+        try {
+          const token = localStorage.getItem('access_token')
+          if (!token) {
+            setIsLoadingChatboxData(false)
+            return
+          }
+
+          const response = await fetch(
+            `http://localhost:8000/api/v1/chatboxes/${selectedChatbox.id}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            }
+          )
+
+          if (response.ok) {
+            const chatbox = await response.json()
+            console.log('✅ [ChatboxPrivatization] Chatbox detayları yüklendi:', chatbox)
+
+            // Renkleri güncelle
+            setColors({
+              primary: chatbox.primary_color || '#FF6925',
+              aiMessage: chatbox.ai_message_color || '#E5E7EB',
+              userMessage: chatbox.user_message_color || '#FF6925',
+              borderColor: chatbox.button_border_color || '#FFB380',
+              aiTextColor: chatbox.ai_text_color || '#1F2937',
+              userTextColor: chatbox.user_text_color || '#FFFFFF',
+              buttonPrimary: chatbox.button_primary_color || '#FF6925',
+              buttonBorderColor: chatbox.button_border_color || '#FFB380',
+              buttonIcon: chatbox.button_icon_color || '#FFFFFF'
+            })
+
+            setTempColors({
+              primary: chatbox.primary_color || '#FF6925',
+              aiMessage: chatbox.ai_message_color || '#E5E7EB',
+              userMessage: chatbox.user_message_color || '#FF6925',
+              borderColor: chatbox.button_border_color || '#FFB380',
+              aiTextColor: chatbox.ai_text_color || '#1F2937',
+              userTextColor: chatbox.user_text_color || '#FFFFFF',
+              buttonPrimary: chatbox.button_primary_color || '#FF6925',
+              buttonBorderColor: chatbox.button_border_color || '#FFB380',
+              buttonIcon: chatbox.button_icon_color || '#FFFFFF'
+            })
+
+            // Başlıkları güncelle
+            setChatboxName(chatbox.name || '')
+            setTempChatboxName(chatbox.name || '')
+            setChatboxTitle(chatbox.chatbox_title || '')
+            setTempChatboxTitle(chatbox.chatbox_title || '')
+            setChatboxInitialMessage(chatbox.initial_message || '')
+            setTempChatboxInitialMessage(chatbox.initial_message || '')
+          }
+        } catch (error) {
+          console.error('❌ [ChatboxPrivatization] Chatbox detayları yüklenirken hata:', error)
+        } finally {
+          setIsLoadingChatboxData(false)
+        }
+      } else if (isCreatingNew) {
+        // Yeni chatbox oluşturma modunda default renkleri yükle
+        if (chatboxData) {
+          const defaultColors = {
+            primary: chatboxData.primary_color || '#FF6925',
+            aiMessage: chatboxData.ai_message_color || '#E5E7EB',
+            userMessage: chatboxData.user_message_color || '#FF6925',
+            borderColor: chatboxData.button_border_color || '#FFB380',
+            aiTextColor: chatboxData.ai_text_color || '#1F2937',
+            userTextColor: chatboxData.user_text_color || '#FFFFFF',
+            buttonPrimary: chatboxData.button_primary_color || '#FF6925',
+            buttonBorderColor: chatboxData.button_border_color || '#FFB380',
+            buttonIcon: chatboxData.button_icon_color || '#FFFFFF'
+          }
+
+          setColors(defaultColors)
+          setTempColors(defaultColors)
+
+          // Başlıkları da yükle
+          setChatboxName(chatboxData.name || '')
+          setTempChatboxName(chatboxData.name || '')
+          setChatboxTitle(chatboxData.chatbox_title || '')
+          setTempChatboxTitle(chatboxData.chatbox_title || '')
+          setChatboxInitialMessage(chatboxData.initial_message || '')
+          setTempChatboxInitialMessage(chatboxData.initial_message || '')
+        }
+        setIsLoadingChatboxData(false)
+      }
+    }
+
+    loadChatboxDetails()
+  }, [selectedChatbox?.id, isCreatingNew])
+
+  // Yeni chatbox modunda chatboxData değişince renkleri güncelle
+  useEffect(() => {
+    if (isCreatingNew && chatboxData) {
+      const defaultColors = {
+        primary: chatboxData.primary_color || '#FF6925',
+        aiMessage: chatboxData.ai_message_color || '#E5E7EB',
+        userMessage: chatboxData.user_message_color || '#FF6925',
+        borderColor: chatboxData.button_border_color || '#FFB380',
+        aiTextColor: chatboxData.ai_text_color || '#1F2937',
+        userTextColor: chatboxData.user_text_color || '#FFFFFF',
+        buttonPrimary: chatboxData.button_primary_color || '#FF6925',
+        buttonBorderColor: chatboxData.button_border_color || '#FFB380',
+        buttonIcon: chatboxData.button_icon_color || '#FFFFFF'
+      }
+
+      setColors(defaultColors)
+      setTempColors(defaultColors)
+    }
+  }, [isCreatingNew, chatboxData])
 
   // Click outside handler
   useEffect(() => {
@@ -134,69 +252,77 @@ export default function ChatboxPrivatization({ themeColors }) {
     setIsChatboxVisible(!isChatboxVisible)
   }
 
-  const handleSendMessage = () => {
-    if (message.trim()) {
-      // Kullanıcı mesajını ekle
-      const userMessage = {
-        id: messages.length + 1,
-        text: message.trim(),
-        sender: 'user',
-        timestamp: new Date()
-      }
-      
-      setMessages(prev => [...prev, userMessage])
-      setMessage('')
-      
-      // Demo bot cevabı (2 saniye sonra)
-      setTimeout(() => {
-        const botMessage = {
-          id: messages.length + 2,
-          text: 'Mesajınız için teşekkürler! Bu bir demo chatbox\'tır. Gerçek bir backend bağlantısı henüz mevcut değildir.',
-          sender: 'bot',
-          timestamp: new Date()
-        }
-        setMessages(prev => [...prev, botMessage])
-      }, 2000)
-    }
-  }
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSendMessage()
-    }
-  }
-
   const handleColorChange = (colorType, newColor) => {
     setTempColors(prev => ({
       ...prev,
       [colorType]: newColor
     }))
-    setHasChanges(true)
+
+    // Değişiklik olduğunu işaretle
+    if (!isCreatingNew) {
+      setHasChanges(true)
+    }
+
+    // Parent state'i güncelle (sadece yeni chatbox modunda)
+    if (setChatboxData && isCreatingNew) {
+      const colorFieldMap = {
+        primary: 'primary_color',
+        aiMessage: 'ai_message_color',
+        userMessage: 'user_message_color',
+        aiTextColor: 'ai_text_color',
+        userTextColor: 'user_text_color',
+        buttonPrimary: 'button_primary_color',
+        buttonBorderColor: 'button_border_color',
+        buttonIcon: 'button_icon_color'
+      }
+
+      const fieldName = colorFieldMap[colorType]
+      if (fieldName) {
+        setChatboxData(prev => ({ ...prev, [fieldName]: newColor }))
+      }
+    }
+  }
+
+  const handleNameChange = (value) => {
+    setTempChatboxName(value)
+
+    // Değişiklik olduğunu işaretle
+    if (!isCreatingNew) {
+      setHasChanges(true)
+    }
+
+    // Parent state'i güncelle (sadece yeni chatbox modunda)
+    if (setChatboxData && isCreatingNew) {
+      setChatboxData(prev => ({ ...prev, name: value }))
+    }
   }
 
   const handleTitleChange = (value) => {
     setTempChatboxTitle(value)
-    setHasChanges(true)
+
+    // Değişiklik olduğunu işaretle
+    if (!isCreatingNew) {
+      setHasChanges(true)
+    }
+
+    // Parent state'i güncelle (sadece yeni chatbox modunda)
+    if (setChatboxData && isCreatingNew) {
+      setChatboxData(prev => ({ ...prev, chatbox_title: value }))
+    }
   }
 
   const handleInitialMessageChange = (value) => {
     setTempChatboxInitialMessage(value)
-    setHasChanges(true)
-  }
 
+    // Değişiklik olduğunu işaretle
+    if (!isCreatingNew) {
+      setHasChanges(true)
+    }
 
-  const applyChanges = () => {
-    setColors(tempColors)
-    setChatboxTitle(tempChatboxTitle)
-    setChatboxInitialMessage(tempChatboxInitialMessage)
-    setHasChanges(false)
-  }
-
-  const resetChanges = () => {
-    setTempColors(colors)
-    setTempChatboxTitle(chatboxTitle)
-    setTempChatboxInitialMessage(chatboxInitialMessage)
-    setHasChanges(false)
+    // Parent state'i güncelle (sadece yeni chatbox modunda)
+    if (setChatboxData && isCreatingNew) {
+      setChatboxData(prev => ({ ...prev, initial_message: value }))
+    }
   }
 
   const handleColorPickerChange = (colorType, colorResult) => {
@@ -207,21 +333,108 @@ export default function ChatboxPrivatization({ themeColors }) {
     setActiveColorPicker(activeColorPicker === colorType ? null : colorType)
   }
 
+  // Değişiklikleri kaydet
+  const handleSaveChanges = async () => {
+    if (!selectedChatbox?.id || isCreatingNew) return
+
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Oturum süreniz dolmuş. Lütfen giriş yapın.')
+        return
+      }
+
+      const updatePayload = {
+        name: tempChatboxName,
+        chatbox_title: tempChatboxTitle,
+        initial_message: tempChatboxInitialMessage,
+        primary_color: tempColors.primary,
+        ai_message_color: tempColors.aiMessage,
+        user_message_color: tempColors.userMessage,
+        ai_text_color: tempColors.aiTextColor,
+        user_text_color: tempColors.userTextColor,
+        button_primary_color: tempColors.buttonPrimary,
+        button_border_color: tempColors.buttonBorderColor,
+        button_icon_color: tempColors.buttonIcon
+      }
+
+      const response = await fetch(
+        `http://localhost:8000/api/v1/chatboxes/${selectedChatbox.id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updatePayload)
+        }
+      )
+
+      if (response.ok) {
+        const updatedChatbox = await response.json()
+        console.log('✅ Chatbox başarıyla güncellendi:', updatedChatbox)
+
+        // Kalıcı state'leri güncelle
+        setColors(tempColors)
+        setChatboxName(tempChatboxName)
+        setChatboxTitle(tempChatboxTitle)
+        setChatboxInitialMessage(tempChatboxInitialMessage)
+
+        // Değişiklik bayrağını kapat
+        setHasChanges(false)
+
+        alert('Chatbox başarıyla güncellendi!')
+      } else {
+        const error = await response.json()
+        console.error('❌ Chatbox güncellenemedi:', error)
+        alert('Chatbox güncellenirken bir hata oluştu: ' + (error.detail || 'Bilinmeyen hata'))
+      }
+    } catch (error) {
+      console.error('❌ Chatbox güncellenirken hata:', error)
+      alert('Chatbox güncellenirken bir hata oluştu')
+    }
+  }
+
+  // Değişiklikleri geri al
+  const handleCancelChanges = () => {
+    // Temp state'leri kalıcı state'lere geri döndür
+    setTempColors(colors)
+    setTempChatboxName(chatboxName)
+    setTempChatboxTitle(chatboxTitle)
+    setTempChatboxInitialMessage(chatboxInitialMessage)
+
+    // Değişiklik bayrağını kapat
+    setHasChanges(false)
+  }
+
+  // Loading durumunu kontrol et
+  if (isLoadingChatboxData) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: themeColors.primary }}></div>
+          <p className="text-gray-600">Chatbox yükleniyor...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="relative">
+    <>
+      <div className="relative">
 
       {/* Ana Container - Chatbox ve Özelleştirme yan yana */}
       <div className="flex gap-4 lg:gap-8 flex-col lg:flex-row" style={{ marginLeft: '20px', marginTop: '20px', marginRight: '20px', paddingBottom: '40px' }}>
-        
+
         {/* Chatbox Elements */}
         <ChatboxElements
-          chatboxTitle={tempChatboxTitle}
-          initialMessage={tempChatboxInitialMessage}
+          chatboxTitle={tempChatboxTitle || chatboxTitle || 'Chatbox'}
+          initialMessage={tempChatboxInitialMessage || chatboxInitialMessage || 'Merhaba!'}
           colors={{
-            primary: tempColors.primary,
-            aiMessage: tempColors.aiMessage,
-            userMessage: tempColors.userMessage,
-            borderColor: tempColors.buttonBorderColor || tempColors.borderColor,
+            primary: tempColors.primary || '#FF6925',
+            aiMessage: tempColors.aiMessage || '#E5E7EB',
+            userMessage: tempColors.userMessage || '#FF6925',
+            borderColor: tempColors.buttonBorderColor || tempColors.borderColor || '#FFB380',
             aiTextColor: tempColors.aiTextColor,
             userTextColor: tempColors.userTextColor,
             buttonPrimary: tempColors.buttonPrimary,
@@ -230,7 +443,7 @@ export default function ChatboxPrivatization({ themeColors }) {
           isVisible={isChatboxVisible}
           onToggle={handleToggleChatbox}
           className={getCardAnimation(0)}
-          style={{ 
+          style={{
             animationDelay: getAnimationDelay(0)
           }}
         />
@@ -250,15 +463,15 @@ export default function ChatboxPrivatization({ themeColors }) {
           {/* Özellikler Header */}
           <div className="flex items-center p-3 sm:p-4 lg:p-6 xl:p-8 border-b border-gray-200">
             <h3 className="text-lg sm:text-xl lg:text-2xl xl:text-3xl">
-              <span 
+              <span
                 className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
                   backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
                 }}
               >
                 Chatbox
-              </span> 
-              <span 
+              </span>
+              <span
                 className="font-normal bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
                   backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
@@ -278,12 +491,23 @@ export default function ChatboxPrivatization({ themeColors }) {
               <h4 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 mb-2 sm:mb-3 lg:mb-4">Chatbox</h4>
               <div className="flex flex-col gap-2 sm:gap-3 lg:gap-4">
                 <div className="flex flex-col gap-1 sm:gap-2">
+                  <p className="text-xs sm:text-sm lg:text-base text-gray-700">Chatbox İsmi:</p>
+                  <input
+                    type="text"
+                    value={tempChatboxName}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold focus:outline-none focus:border-[#6434F8] bg-white w-full text-gray-600"
+                    placeholder="örn: destek-chatbox, satis-chatbox"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 sm:gap-2">
                   <p className="text-xs sm:text-sm lg:text-base text-gray-700">Chatbox Başlık İsmi:</p>
                   <input
                     type="text"
                     value={tempChatboxTitle}
                     onChange={(e) => handleTitleChange(e.target.value)}
                     className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold focus:outline-none focus:border-[#6434F8] bg-white w-full text-gray-600"
+                    placeholder="örn: Zzen Chatbox, Destek Chatbox"
                   />
                 </div>
                 <div className="flex flex-col gap-1 sm:gap-2">
@@ -293,6 +517,7 @@ export default function ChatboxPrivatization({ themeColors }) {
                     value={tempChatboxInitialMessage}
                     onChange={(e) => handleInitialMessageChange(e.target.value)}
                     className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold focus:outline-none focus:border-[#6434F8] bg-white w-full text-gray-600"
+                    placeholder="örn: Merhaba! Size nasıl yardımcı olabilirim?"
                   />
                 </div>
               </div>
@@ -537,30 +762,38 @@ export default function ChatboxPrivatization({ themeColors }) {
 
             </div>
 
-            {/* Kaydet ve Geri Al Butonları */}
-            {hasChanges && (
-              <div className="flex justify-center space-x-2 sm:space-x-4 p-3 sm:p-4 lg:p-6">
-                <button
-                  onClick={resetChanges}
-                  className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 p-2 sm:p-3 rounded-lg transition-all duration-300 hover:scale-105 border border-gray-300"
-                >
-                  <Undo2 className="w-4 sm:w-5 h-4 sm:h-5 text-gray-600" />
-                </button>
-                <button
-                  onClick={applyChanges}
-                  className="flex items-center space-x-1 sm:space-x-2 text-white px-4 sm:px-6 lg:px-8 py-2 sm:py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300 hover:scale-105 text-sm sm:text-base"
-                  style={{ backgroundColor: '#6434F8' }}
-                >
-                  <Save className="w-4 sm:w-5 h-4 sm:h-5" />
-                  <span>Kaydet</span>
-                </button>
-              </div>
-            )}
-
           </div>
         </div>
 
       </div>
     </div>
+
+      {/* Kaydet/Vazgeç Butonları - Portal ile tab menüsüne render et */}
+      {!isCreatingNew && hasChanges && portalContainer && createPortal(
+        <>
+          {/* Vazgeç Butonu */}
+          <button
+            onClick={handleCancelChanges}
+            className="flex items-center justify-center text-gray-600 hover:text-gray-800 p-1 sm:p-1.5 rounded-lg font-medium border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 transition-all duration-300 hover:scale-105"
+            title="Vazgeç"
+          >
+            <ArrowLeft className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+          </button>
+
+          {/* Kaydet Butonu */}
+          <button
+            onClick={handleSaveChanges}
+            className="flex items-center space-x-1 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-300 hover:scale-105 text-xs sm:text-sm"
+            style={{
+              background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+            }}
+          >
+            <Save className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
+            <span>Kaydet</span>
+          </button>
+        </>,
+        portalContainer
+      )}
+    </>
   )
 }

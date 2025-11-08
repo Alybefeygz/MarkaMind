@@ -49,12 +49,14 @@ from app.routers.users import router as users_router
 from app.routers.brands import router as brands_router
 from app.routers.stores import router as stores_router
 from app.routers.products import router as products_router
+from app.routers.chatboxes import router as chatboxes_router
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(brands_router, prefix="/api/v1")
 app.include_router(stores_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
+app.include_router(chatboxes_router, prefix="/api/v1")
 
 # Additional routers (will be added in next steps)
 # app.include_router(chatbots_router, prefix="/api/v1")

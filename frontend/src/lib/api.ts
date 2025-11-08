@@ -311,6 +311,200 @@ export async function getProductReviews(
   )
 }
 
+// ============================================================================
+// Chatbox API Functions
+// ============================================================================
+
+export interface ChatboxCreate {
+  brand_id?: string | null  // Opsiyonel
+  store_id?: string | null  // Opsiyonel
+  name: string  // Zorunlu
+  chatbox_title: string  // Zorunlu
+  initial_message: string  // Zorunlu
+  placeholder_text?: string  // Opsiyonel
+  primary_color: string  // Zorunlu
+  ai_message_color: string  // Zorunlu
+  user_message_color: string  // Zorunlu
+  ai_text_color: string  // Zorunlu
+  user_text_color: string  // Zorunlu
+  button_primary_color: string  // Zorunlu
+  button_border_color: string  // Zorunlu
+  button_icon_color: string  // Zorunlu
+  avatar_url?: string | null  // Opsiyonel
+  animation_style?: string  // Opsiyonel
+  language?: string  // Opsiyonel
+  status?: string  // Opsiyonel
+}
+
+export interface ChatboxResponse {
+  id: string
+  brand_id: string
+  name: string
+  chatbox_title: string
+  initial_message: string
+  placeholder_text: string
+  primary_color: string
+  ai_message_color: string
+  user_message_color: string
+  ai_text_color: string
+  user_text_color: string
+  button_primary_color: string
+  button_border_color: string
+  button_icon_color: string
+  avatar_url: string | null
+  animation_style: string
+  language: string
+  status: string
+  script_token: string
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Create a new chatbox
+ */
+export async function createChatbox(chatbox: ChatboxCreate): Promise<ChatboxResponse> {
+  return apiFetch<ChatboxResponse>('/chatboxes/', {
+    method: 'POST',
+    body: JSON.stringify(chatbox),
+  })
+}
+
+/**
+ * Get user's chatboxes
+ */
+export interface ChatboxListResponse {
+  items: ChatboxResponse[]
+  total: number
+  page: number
+  size: number
+  pages: number
+}
+
+export async function getUserChatboxes(
+  page: number = 1,
+  size: number = 100,
+  brandId?: string,
+  statusFilter?: string
+): Promise<ChatboxListResponse> {
+  let url = `/chatboxes/?page=${page}&size=${size}`
+  if (brandId) url += `&brand_id=${brandId}`
+  if (statusFilter) url += `&status_filter=${statusFilter}`
+
+  return apiFetch<ChatboxListResponse>(url)
+}
+
+// ============================================================================
+// Brand API Functions
+// ============================================================================
+
+export interface BrandCreate {
+  name: string
+  description?: string | null
+  logo_url?: string | null
+  theme_color?: string
+}
+
+export interface BrandResponse {
+  id: string
+  user_id: string
+  name: string
+  slug: string
+  description: string | null
+  logo_url: string | null
+  theme_color: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface BrandListItem {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  logo_url: string | null
+  theme_color: string
+  is_active: boolean
+}
+
+export interface BrandsListResponse {
+  items: BrandListItem[]
+  total: number
+  page: number
+  size: number
+  pages: number
+}
+
+export interface BrandUpdate {
+  name?: string
+  description?: string | null
+  logo_url?: string | null
+  theme_color?: string
+  is_active?: boolean
+}
+
+/**
+ * Create a new brand
+ */
+export async function createBrand(brand: BrandCreate): Promise<BrandResponse> {
+  return apiFetch<BrandResponse>('/brands/', {
+    method: 'POST',
+    body: JSON.stringify(brand),
+  })
+}
+
+/**
+ * Get user's brands
+ */
+export async function getUserBrands(
+  page: number = 1,
+  size: number = 100
+): Promise<BrandsListResponse> {
+  return apiFetch<BrandsListResponse>(`/brands/?page=${page}&size=${size}`)
+}
+
+/**
+ * Get brand by ID
+ */
+export async function getBrandById(brandId: string): Promise<BrandResponse> {
+  return apiFetch<BrandResponse>(`/brands/${brandId}`)
+}
+
+/**
+ * Update brand
+ */
+export async function updateBrand(
+  brandId: string,
+  brandUpdate: BrandUpdate
+): Promise<BrandResponse> {
+  return apiFetch<BrandResponse>(`/brands/${brandId}`, {
+    method: 'PUT',
+    body: JSON.stringify(brandUpdate),
+  })
+}
+
+/**
+ * Delete brand
+ */
+export async function deleteBrand(brandId: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/brands/${brandId}`, {
+    method: 'DELETE',
+  })
+}
+
+/**
+ * Upload brand logo
+ */
+export async function uploadBrandLogo(
+  brandId: string,
+  file: File
+): Promise<{ success: boolean; logo_url: string; message: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  return apiUpload(`/brands/${brandId}/logo/upload`, formData)
+}
+
 export default {
   createProduct,
   getStoreProducts,
@@ -321,4 +515,12 @@ export default {
   getUserStores,
   getStoreById,
   getProductReviews,
+  createChatbox,
+  getUserChatboxes,
+  createBrand,
+  getUserBrands,
+  getBrandById,
+  updateBrand,
+  deleteBrand,
+  uploadBrandLogo,
 }
