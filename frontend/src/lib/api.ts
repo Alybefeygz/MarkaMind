@@ -246,7 +246,7 @@ export interface Store {
   brand_id: string
   name: string
   platform: string
-  logo_url?: string
+  logo?: string | null  // Backend'de 'logo' olarak geliyor
   status: string
   primary_color: string
   secondary_color: string
@@ -255,11 +255,37 @@ export interface Store {
   updated_at: string
 }
 
+export interface StoresListResponse {
+  items: Store[]
+  total: number
+  page: number
+  size: number
+  pages: number
+}
+
 /**
  * Get user stores
+ * Backend maksimum 100 item döndürüyor, tüm mağazaları almak için sayfalama yapıyoruz
  */
 export async function getUserStores(): Promise<Store[]> {
-  return apiFetch<Store[]>('/stores/')
+  const allStores: Store[] = []
+  let page = 1
+  const size = 100 // Backend'in maksimum limiti
+  let hasMore = true
+
+  while (hasMore) {
+    const response = await apiFetch<StoresListResponse>(`/stores/?page=${page}&size=${size}`)
+    allStores.push(...response.items)
+    
+    // Eğer dönen item sayısı size'dan azsa veya toplam sayfa sayısına ulaştıysak dur
+    if (response.items.length < size || page >= response.pages) {
+      hasMore = false
+    } else {
+      page++
+    }
+  }
+
+  return allStores
 }
 
 /**
@@ -394,6 +420,200 @@ export async function getUserChatboxes(
   return apiFetch<ChatboxListResponse>(url)
 }
 
+/**
+ * Delete a chatbox
+ */
+export async function deleteChatbox(chatboxId: string): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/chatboxes/${chatboxId}`, {
+    method: 'DELETE',
+  })
+}
+
+/**
+ * Chatbox Integrations (Stores & Products)
+ */
+export interface ChatboxStoreIntegration {
+  store_id: string
+  show_on_homepage: boolean
+  show_on_products: boolean
+  position: string
+  is_active: boolean
+}
+
+export interface ChatboxProductIntegration {
+  product_id: string
+  show_on_product_page: boolean
+  is_active: boolean
+}
+
+export interface ChatboxIntegrationsUpdate {
+  stores: ChatboxStoreIntegration[]
+  products: ChatboxProductIntegration[]
+  stores_only: string[]
+}
+
+export interface ChatboxIntegrationsResponse {
+  stores_added: number
+  products_added: number
+  stores_removed: number
+  products_removed: number
+  message: string
+}
+
+/**
+ * Update chatbox integrations (stores and products)
+ */
+export async function updateChatboxIntegrations(
+  chatboxId: string,
+  integrations: ChatboxIntegrationsUpdate
+): Promise<ChatboxIntegrationsResponse> {
+  return apiFetch<ChatboxIntegrationsResponse>(`/chatboxes/${chatboxId}/integrations`, {
+    method: 'PUT',
+    body: JSON.stringify(integrations),
+  })
+}
+
+/**
+ * Knowledge Source (PDF) Types and Functions
+ */
+export interface KnowledgeSourceResponse {
+  id: string
+  chatbot_id: string
+  source_type: string
+  source_name: string
+  storage_path: string
+  file_size: number | null
+  status: string
+  token_count: number
+  error_message: string | null
+  is_active: boolean
+  content: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Get chatbox knowledge sources (PDFs)
+ */
+export async function getChatboxKnowledgeSources(
+  chatboxId: string
+): Promise<KnowledgeSourceResponse[]> {
+  return apiFetch<KnowledgeSourceResponse[]>(`/chatboxes/${chatboxId}/knowledge-sources`)
+}
+
+/**
+ * Upload knowledge source (PDF) to chatbox
+ */
+export async function uploadKnowledgeSource(
+  chatboxId: string,
+  file: File
+): Promise<KnowledgeSourceResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  return apiUpload<KnowledgeSourceResponse>(`/chatboxes/${chatboxId}/knowledge-sources`, formData)
+}
+
+/**
+ * Toggle knowledge source active/inactive status
+ */
+export async function toggleKnowledgeSourceStatus(
+  chatboxId: string,
+  sourceId: string
+): Promise<KnowledgeSourceResponse> {
+  return apiFetch<KnowledgeSourceResponse>(
+    `/chatboxes/${chatboxId}/knowledge-sources/${sourceId}/toggle`,
+    {
+      method: 'PATCH',
+    }
+  )
+}
+
+/**
+ * Delete knowledge source (PDF)
+ */
+export async function deleteKnowledgeSource(
+  chatboxId: string,
+  sourceId: string
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(
+    `/chatboxes/${chatboxId}/knowledge-sources/${sourceId}`,
+    {
+      method: 'DELETE',
+    }
+  )
+}
+
+/**
+ * Create edited PDF from modified content
+ */
+export async function createEditedPDF(
+  chatboxId: string,
+  data: {
+    original_source_id: string
+    edited_content: string
+  }
+): Promise<KnowledgeSourceResponse> {
+  return apiFetch<KnowledgeSourceResponse>(
+    `/chatboxes/${chatboxId}/knowledge-sources/create-edited`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    }
+  )
+}
+
+// ============================================================================
+// Chatbox Store & Product Integration API Functions
+// ============================================================================
+
+export interface ChatboxStoreRelation {
+  id: string
+  store: {
+    id: string
+    name: string
+    slug: string
+    logo?: string
+  }
+  show_on_homepage: boolean
+  show_on_products: boolean
+  position: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface ChatboxProductRelation {
+  id: string
+  product: {
+    id: string
+    name: string
+    slug: string
+    price: string
+    category: string
+    store_name: string
+  }
+  show_on_product_page: boolean
+  is_active: boolean
+  created_at: string
+}
+
+/**
+ * Get chatbox store integrations
+ */
+export async function getChatboxStores(chatboxId: string): Promise<ChatboxStoreRelation[]> {
+  return apiFetch<ChatboxStoreRelation[]>(`/chatboxes/${chatboxId}/stores`)
+}
+
+/**
+ * Get chatbox product integrations
+ */
+export async function getChatboxProducts(chatboxId: string): Promise<ChatboxProductRelation[]> {
+  return apiFetch<ChatboxProductRelation[]>(`/chatboxes/${chatboxId}/products`)
+}
+
 // ============================================================================
 // Brand API Functions
 // ============================================================================
@@ -517,6 +737,10 @@ export default {
   getProductReviews,
   createChatbox,
   getUserChatboxes,
+  getChatboxKnowledgeSources,
+  uploadKnowledgeSource,
+  toggleKnowledgeSourceStatus,
+  deleteKnowledgeSource,
   createBrand,
   getUserBrands,
   getBrandById,

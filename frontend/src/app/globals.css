@@ -64,3 +64,15 @@ body {
 .animate-slide-to-right {
   animation: slide-to-right 0.3s ease-in forwards;
 }
+
+/* Slide up animation for modal */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

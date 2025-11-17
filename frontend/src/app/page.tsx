@@ -42,7 +42,6 @@ export default function Home() {
   // Yeni chatbox verileri - tema renkleriyle uyumlu default değerler
   const [newChatboxData, setNewChatboxData] = useState({
     name: '',
-    brand_id: '',
     chatbox_title: '',
     initial_message: '',
     placeholder_text: 'Mesajınızı yazın...',
@@ -57,9 +56,7 @@ export default function Home() {
     avatar_url: null,
     animation_style: 'fade',
     language: 'tr',
-    status: 'draft',
-    selectedStores: [],
-    selectedProducts: []
+    status: 'draft'
   })
 
   // Responsive state for tab positions
@@ -72,11 +69,10 @@ export default function Home() {
     'Entegrasyonlar'
   ]
 
-  // Yeni chatbox oluşturma için tab'lar (Önizleme hariç)
+  // Yeni chatbox oluşturma için tab'lar (Önizleme ve Entegrasyonlar hariç)
   const newChatboxTabs = [
     'Özelleştirme',
-    'Veri Kaynakları',
-    'Entegrasyonlar'
+    'Veri Kaynakları'
   ]
   
   // Active tab'ın index'ini bul
@@ -180,7 +176,6 @@ export default function Home() {
     if (isCreatingNewChatbox) {
       setNewChatboxData({
         name: '',
-        brand_id: '',
         chatbox_title: '',
         initial_message: '',
         placeholder_text: 'Mesajınızı yazın...',
@@ -195,9 +190,7 @@ export default function Home() {
         avatar_url: null,
         animation_style: 'fade',
         language: 'tr',
-        status: 'draft',
-        selectedStores: [],
-        selectedProducts: []
+        status: 'draft'
       })
       setIsCreatingNewChatbox(false)
       setActiveTab('Önizleme') // Default tab'a dön
@@ -308,7 +301,7 @@ export default function Home() {
                   onMouseLeave={(e) => e.target.style.borderColor = isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'}
                 >
                   <div className="flex items-center space-x-1 sm:space-x-2 flex-1 min-w-0">
-                    <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: themeColors.primary }} />
+                    <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: chatboxList.find(cb => cb.id === selectedChatbox?.id)?.primary_color || themeColors.primary }} />
                     <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedChatbox.name}</span>
                   </div>
                   <ChevronDown className={`w-3 sm:w-4 h-3 sm:h-4 text-gray-500 flex-shrink-0 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
@@ -316,7 +309,7 @@ export default function Home() {
 
                 {/* Dropdown Menu */}
                 {isDropdownOpen && pageTitle.bold === 'Chatbox' && (
-                  <div className="absolute left-0 sm:right-0 mt-2 w-full sm:w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                  <div className="absolute left-0 sm:right-0 mt-2 w-full sm:w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
                     {isLoadingChatboxes ? (
                       <div className="flex items-center justify-center p-8">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -336,16 +329,10 @@ export default function Home() {
                           className="flex items-center justify-between p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                         >
                           <div className="flex items-center space-x-2 flex-1 min-w-0">
-                            <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: themeColors.primary }} />
+                            <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: chatbox.primary_color || themeColors.primary }} />
                             <div className="min-w-0">
                               <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{chatbox.name}</p>
                             </div>
-                          </div>
-                          <div className="flex items-center flex-shrink-0">
-                            <div className={`w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full ${chatbox.status === 'active' ? 'bg-green-400' : 'bg-gray-400'}`}></div>
-                            <span className={`ml-1 sm:ml-2 text-xs ${chatbox.status === 'active' ? 'text-green-600' : 'text-gray-500'}`}>
-                              {chatbox.status === 'active' ? 'Aktif' : 'Pasif'}
-                            </span>
                           </div>
                         </div>
                       ))
@@ -360,7 +347,6 @@ export default function Home() {
                   // State'i tema renkleriyle reset et
                   setNewChatboxData({
                     name: '',
-                    brand_id: '',
                     chatbox_title: '',
                     initial_message: '',
                     placeholder_text: 'Mesajınızı yazın...',
@@ -375,9 +361,7 @@ export default function Home() {
                     avatar_url: null,
                     animation_style: 'fade',
                     language: 'tr',
-                    status: 'draft',
-                    selectedStores: [],
-                    selectedProducts: []
+                    status: 'draft'
                   })
                   setIsCreatingNewChatbox(true)
                   setActiveTab('Özelleştirme') // Tab'ı sıfırla
@@ -410,7 +394,7 @@ export default function Home() {
                   onMouseLeave={(e) => e.target.style.borderColor = isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'}
                 >
                   <div className="flex items-center space-x-1 sm:space-x-2 flex-1 min-w-0">
-                    <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: themeColors.primary }} />
+                    <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: chatboxList.find(cb => cb.id === selectedChatbox?.id)?.primary_color || themeColors.primary }} />
                     <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedChatbox.name}</span>
                   </div>
                   <ChevronDown className={`w-3 sm:w-4 h-3 sm:h-4 text-gray-500 flex-shrink-0 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
@@ -418,7 +402,7 @@ export default function Home() {
 
                 {/* Dropdown Menu */}
                 {isDropdownOpen && pageTitle.bold === 'Mesajlaşma' && (
-                  <div className="absolute left-0 sm:right-0 mt-2 w-full sm:w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                  <div className="absolute left-0 sm:right-0 mt-2 w-full sm:w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
                     {isLoadingChatboxes ? (
                       <div className="flex items-center justify-center p-8">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -438,16 +422,10 @@ export default function Home() {
                           className="flex items-center justify-between p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                         >
                           <div className="flex items-center space-x-2 flex-1 min-w-0">
-                            <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: themeColors.primary }} />
+                            <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: chatbox.primary_color || themeColors.primary }} />
                             <div className="min-w-0">
                               <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{chatbox.name}</p>
                             </div>
-                          </div>
-                          <div className="flex items-center flex-shrink-0">
-                            <div className={`w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full ${chatbox.status === 'active' ? 'bg-green-400' : 'bg-gray-400'}`}></div>
-                            <span className={`ml-1 sm:ml-2 text-xs ${chatbox.status === 'active' ? 'text-green-600' : 'text-gray-500'}`}>
-                              {chatbox.status === 'active' ? 'Aktif' : 'Pasif'}
-                            </span>
                           </div>
                         </div>
                       ))
@@ -520,14 +498,13 @@ export default function Home() {
                   </div>
 
                   {/* Butonlar */}
-                  <div className="flex items-center space-x-2 sm:space-x-3">
+                  <div className="flex items-center space-x-2 sm:space-x-3 pb-2">
                     {/* Vazgeç Butonu */}
                     <button
                       onClick={() => {
                         // State'i tema renkleriyle reset et
                         setNewChatboxData({
                           name: '',
-                          brand_id: '',
                           chatbox_title: '',
                           initial_message: '',
                           placeholder_text: 'Mesajınızı yazın...',
@@ -542,18 +519,16 @@ export default function Home() {
                           avatar_url: null,
                           animation_style: 'fade',
                           language: 'tr',
-                          status: 'draft',
-                          selectedStores: [],
-                          selectedProducts: []
+                          status: 'draft'
                         })
                         setIsCreatingNewChatbox(false)
                         setActiveTab('Önizleme') // Default tab'a dön
                         setPageTitle({ bold: 'Chatbox', normal: 'Yönetimi' })
                       }}
-                      className="flex items-center justify-center text-gray-600 hover:text-gray-800 p-1.5 sm:p-2 lg:p-2.5 rounded-lg sm:rounded-xl font-medium border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 transition-all duration-300 hover:scale-105"
+                      className="flex items-center justify-center text-gray-600 hover:text-gray-800 p-1 sm:p-1.5 rounded-lg font-medium border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 transition-all duration-300 hover:scale-105"
                       title="Vazgeç"
                     >
-                      <ArrowLeft className="w-4 sm:w-5 lg:w-6 h-4 sm:h-5 lg:h-6" />
+                      <ArrowLeft className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                     </button>
 
                     {/* Kaydet Butonu */}
@@ -563,10 +538,6 @@ export default function Home() {
                           // Validation
                           if (!newChatboxData.name) {
                             alert('Lütfen chatbox ismini girin')
-                            return
-                          }
-                          if (!newChatboxData.brand_id) {
-                            alert('Lütfen en az bir mağaza seçin')
                             return
                           }
                           if (!newChatboxData.chatbox_title) {
@@ -582,7 +553,6 @@ export default function Home() {
 
                           // Backend'e kaydet
                           const chatboxPayload: ChatboxCreate = {
-                            brand_id: newChatboxData.brand_id,
                             name: newChatboxData.name,
                             chatbox_title: newChatboxData.chatbox_title,
                             initial_message: newChatboxData.initial_message,
@@ -604,9 +574,6 @@ export default function Home() {
                           const result = await createChatbox(chatboxPayload)
                           console.log('Chatbox başarıyla kaydedildi:', result)
 
-                          // TODO: Mağaza ve ürün ilişkilendirmeleri de yapılacak
-                          // selectedStores ve selectedProducts kullanılarak
-
                           alert('Chatbox başarıyla oluşturuldu!')
 
                           // Chatbox listesini yeniden yükle
@@ -619,7 +586,6 @@ export default function Home() {
                           // Formu tema renkleriyle sıfırla ve geri dön
                           setNewChatboxData({
                             name: '',
-                            brand_id: '',
                             chatbox_title: '',
                             initial_message: '',
                             placeholder_text: 'Mesajınızı yazın...',
@@ -634,9 +600,7 @@ export default function Home() {
                             avatar_url: null,
                             animation_style: 'fade',
                             language: 'tr',
-                            status: 'draft',
-                            selectedStores: [],
-                            selectedProducts: []
+                            status: 'draft'
                           })
                           setIsCreatingNewChatbox(false)
                           setPageTitle({ bold: 'Chatbox', normal: 'Yönetimi' })
@@ -645,12 +609,12 @@ export default function Home() {
                           alert('Chatbox kaydedilirken bir hata oluştu: ' + (error instanceof Error ? error.message : 'Bilinmeyen hata'))
                         }
                       }}
-                      className="flex items-center space-x-1 sm:space-x-2 text-white px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-2.5 rounded-lg sm:rounded-xl font-medium shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105 text-xs sm:text-sm lg:text-base"
+                      className="flex items-center space-x-1 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-300 hover:scale-105 text-xs sm:text-sm"
                       style={{
                         background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
                       }}
                     >
-                      <Save className="w-3 sm:w-4 lg:w-5 h-3 sm:h-4 lg:h-5" />
+                      <Save className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
                       <span>Kaydet</span>
                     </button>
                   </div>
@@ -684,7 +648,6 @@ export default function Home() {
                 // State'i tema renkleriyle reset et
                 setNewChatboxData({
                   name: '',
-                  brand_id: '',
                   chatbox_title: '',
                   initial_message: '',
                   placeholder_text: 'Mesajınızı yazın...',
@@ -699,9 +662,7 @@ export default function Home() {
                   avatar_url: null,
                   animation_style: 'fade',
                   language: 'tr',
-                  status: 'draft',
-                  selectedStores: [],
-                  selectedProducts: []
+                  status: 'draft'
                 })
                 setIsCreatingNewChatbox(false)
                 setPageTitle({ bold: 'Chatbox', normal: 'Yönetimi' }) // Başlığı geri döndür

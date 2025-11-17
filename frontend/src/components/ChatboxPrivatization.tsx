@@ -1,10 +1,11 @@
 'use client'
 
-import { ChevronDown, Plus, MessageSquare, Settings, Trash2, Eye, ArrowLeft, Send, User, Home, Bot, Zap, Palette, Save } from 'lucide-react'
+import { ChevronDown, Plus, MessageSquare, Settings, Trash2, Eye, ArrowLeft, Send, User, Home, Bot, Zap, Palette, Save, FileText, Upload } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { SketchPicker } from 'react-color'
 import ChatboxElements from './ChatboxElements'
+import { getChatboxKnowledgeSources, uploadKnowledgeSource, deleteKnowledgeSource, type KnowledgeSourceResponse } from '@/lib/api'
 
 export default function ChatboxPrivatization({ selectedChatbox, themeColors, isCreatingNew, onCancelCreate, chatboxData, setChatboxData }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -45,6 +46,12 @@ export default function ChatboxPrivatization({ selectedChatbox, themeColors, isC
   // Değişiklik tracking için state
   const [hasChanges, setHasChanges] = useState(false)
 
+  // PDF/Knowledge Sources state'leri
+  const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSourceResponse[]>([])
+  const [isLoadingPDFs, setIsLoadingPDFs] = useState(false)
+  const [isUploadingPDF, setIsUploadingPDF] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
 
   // Color picker modal states
   const [activeColorPicker, setActiveColorPicker] = useState(null)
@@ -67,11 +74,23 @@ export default function ChatboxPrivatization({ selectedChatbox, themeColors, isC
     return () => clearTimeout(timer)
   }, [])
 
-  // Portal container'ı bul
+  // Portal container'ı bul - DOM hazır olana kadar bekle
   useEffect(() => {
-    const container = document.getElementById('chatbox-save-buttons-container')
-    setPortalContainer(container)
-  }, [])
+    // Container'ı hemen dene
+    let container = document.getElementById('chatbox-save-buttons-container')
+
+    if (container) {
+      setPortalContainer(container)
+    } else {
+      // Bulunamazsa kısa bir gecikme sonra tekrar dene
+      const timer = setTimeout(() => {
+        container = document.getElementById('chatbox-save-buttons-container')
+        setPortalContainer(container)
+      }, 100)
+
+      return () => clearTimeout(timer)
+    }
+  }, [isCreatingNew])
 
   // Backend'den seçili chatbox verilerini yükle
   useEffect(() => {
@@ -167,6 +186,29 @@ export default function ChatboxPrivatization({ selectedChatbox, themeColors, isC
     }
 
     loadChatboxDetails()
+  }, [selectedChatbox?.id, isCreatingNew])
+
+  // PDF'leri yükle
+  useEffect(() => {
+    const loadKnowledgeSources = async () => {
+      if (selectedChatbox?.id && !isCreatingNew) {
+        setIsLoadingPDFs(true)
+        try {
+          const sources = await getChatboxKnowledgeSources(selectedChatbox.id)
+          setKnowledgeSources(sources)
+          console.log('✅ [ChatboxPrivatization] PDF\'ler yüklendi:', sources)
+        } catch (error) {
+          console.error('❌ [ChatboxPrivatization] PDF\'ler yüklenirken hata:', error)
+          setKnowledgeSources([])
+        } finally {
+          setIsLoadingPDFs(false)
+        }
+      } else {
+        setKnowledgeSources([])
+      }
+    }
+
+    loadKnowledgeSources()
   }, [selectedChatbox?.id, isCreatingNew])
 
   // Yeni chatbox modunda chatboxData değişince renkleri güncelle
@@ -405,6 +447,117 @@ export default function ChatboxPrivatization({ selectedChatbox, themeColors, isC
 
     // Değişiklik bayrağını kapat
     setHasChanges(false)
+  }
+
+  // PDF Yükleme fonksiyonu
+  const handleUploadPDF = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !selectedChatbox?.id || isCreatingNew) return
+
+    // PDF kontrolü
+    if (file.type !== 'application/pdf') {
+      alert('Lütfen sadece PDF dosyası yükleyin.')
+      return
+    }
+
+    // Dosya boyutu kontrolü (örn: 10MB)
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    if (file.size > maxSize) {
+      alert('Dosya boyutu 10MB\'dan küçük olmalıdır.')
+      return
+    }
+
+    setIsUploadingPDF(true)
+    try {
+      const newSource = await uploadKnowledgeSource(selectedChatbox.id, file)
+      console.log('✅ PDF başarıyla yüklendi:', newSource)
+
+      // Listeyi güncelle
+      setKnowledgeSources(prev => [newSource, ...prev])
+
+      alert('PDF başarıyla yüklendi!')
+    } catch (error) {
+      console.error('❌ PDF yüklenirken hata:', error)
+      alert('PDF yüklenirken bir hata oluştu: ' + (error.message || 'Bilinmeyen hata'))
+    } finally {
+      setIsUploadingPDF(false)
+      // Input'u temizle
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  // PDF Silme fonksiyonu
+  const handleDeletePDF = async (sourceId: string) => {
+    if (!selectedChatbox?.id || isCreatingNew) return
+
+    if (!confirm('Bu PDF\'i silmek istediğinize emin misiniz?')) {
+      return
+    }
+
+    try {
+      await deleteKnowledgeSource(selectedChatbox.id, sourceId)
+      console.log('✅ PDF başarıyla silindi')
+
+      // Listeyi güncelle
+      setKnowledgeSources(prev => prev.filter(source => source.id !== sourceId))
+
+      alert('PDF başarıyla silindi!')
+    } catch (error) {
+      console.error('❌ PDF silinirken hata:', error)
+      alert('PDF silinirken bir hata oluştu: ' + (error.message || 'Bilinmeyen hata'))
+    }
+  }
+
+  // Dosya boyutunu okunabilir formata çevir
+  const formatFileSize = (bytes: number | null): string => {
+    if (!bytes) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
+  }
+
+  // Zaman farkını hesapla
+  const getTimeAgo = (dateString: string): string => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+    if (diffInSeconds < 60) return `${diffInSeconds} sn önce`
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} dk önce`
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} sa önce`
+    return `${Math.floor(diffInSeconds / 86400)} gün önce`
+  }
+
+  // Status badge rengi
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'processed':
+      case 'ready':
+        return 'bg-green-100 text-green-800'
+      case 'processing':
+        return 'bg-yellow-100 text-yellow-800'
+      case 'failed':
+        return 'bg-red-100 text-red-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'processed':
+      case 'ready':
+        return 'İşlendi'
+      case 'processing':
+        return 'İşleniyor'
+      case 'failed':
+        return 'Hatalı'
+      default:
+        return 'Beklemede'
+    }
   }
 
   // Loading durumunu kontrol et

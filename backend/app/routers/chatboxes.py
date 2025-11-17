@@ -3,13 +3,17 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID, uuid4
 from datetime import datetime
 import secrets
+import io
+from pypdf import PdfReader
 
 from ..schemas.chatbox import (
     ChatboxResponse, ChatboxCreate, ChatboxUpdate, ChatboxList,
     ChatboxStoreRelation, ChatboxStoreRelationCreate, ChatboxStoreRelationUpdate,
     ChatboxProductRelation, ChatboxProductRelationCreate, ChatboxProductRelationUpdate,
     ChatboxStoreBulkCreate, ChatboxStoreBulkResponse,
-    KnowledgeSourceResponse, KnowledgeSourceStatusResponse,
+    ChatboxIntegrationsUpdate, ChatboxIntegrationsResponse,
+    KnowledgeSourceResponse, KnowledgeSourceContentUpdate, KnowledgeSourceStatusResponse,
+    CreateEditedPDFRequest,
     ChatboxStats
 )
 from ..schemas.common import StatusResponse, PaginationParams, PaginationResponse
@@ -25,6 +29,153 @@ router = APIRouter(
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """
+    Extract text content from PDF bytes
+
+    Args:
+        pdf_bytes: PDF file content as bytes
+
+    Returns:
+        Extracted text content
+    """
+    try:
+        pdf_file = io.BytesIO(pdf_bytes)
+        reader = PdfReader(pdf_file)
+
+        text_content = []
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                text_content.append(text)
+
+        return "\n\n".join(text_content)
+    except Exception as e:
+        raise ValueError(f"Failed to extract text from PDF: {str(e)}")
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize filename for storage: remove Turkish characters and special chars
+
+    Args:
+        filename: Original filename with potentially Turkish characters
+
+    Returns:
+        Sanitized filename safe for storage
+    """
+    # Turkish character mapping
+    char_map = {
+        'ç': 'c', 'Ç': 'C',
+        'ğ': 'g', 'Ğ': 'G',
+        'ı': 'i', 'İ': 'I',
+        'ö': 'o', 'Ö': 'O',
+        'ş': 's', 'Ş': 'S',
+        'ü': 'u', 'Ü': 'U',
+        ' ': '_',
+    }
+
+    sanitized = filename
+    for turkish_char, replacement in char_map.items():
+        sanitized = sanitized.replace(turkish_char, replacement)
+
+    # Remove any other non-ASCII characters
+    sanitized = ''.join(char if ord(char) < 128 else '_' for char in sanitized)
+
+    return sanitized
+
+
+def create_pdf_from_text(text: str, filename: str) -> bytes:
+    """
+    Create a PDF file from text content using reportlab
+    WITH TURKISH CHARACTER SUPPORT
+
+    Args:
+        text: Text content to convert to PDF (UTF-8)
+        filename: Name for the PDF file (for metadata)
+
+    Returns:
+        PDF file content as bytes
+    """
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        import os
+
+        # Register Turkish-compatible font (DejaVu Sans)
+        font_path = os.path.join(
+            os.path.dirname(__file__),
+            '..',
+            'fonts',
+            'dejavu-fonts-ttf-2.37',
+            'ttf',
+            'DejaVuSans.ttf'
+        )
+
+        # Register font only once (check cache)
+        if 'DejaVuSans' not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
+            print(f"✅ [create_pdf_from_text] DejaVu Sans font registered")
+
+        # Create PDF in memory
+        buffer = io.BytesIO()
+
+        # Create PDF document
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=2*cm,
+            leftMargin=2*cm,
+            topMargin=2*cm,
+            bottomMargin=2*cm,
+            title=filename
+        )
+
+        # Container for PDF elements
+        story = []
+
+        # Get styles
+        styles = getSampleStyleSheet()
+
+        # Custom style for Turkish characters
+        normal_style = ParagraphStyle(
+            'TurkishNormal',
+            parent=styles['Normal'],
+            fontName='DejaVuSans',  # Use Turkish-compatible font
+            fontSize=10,
+            leading=14,
+            wordWrap='CJK'  # Better word wrapping for non-Latin characters
+        )
+
+        # Split text into paragraphs
+        paragraphs = text.split('\n')
+
+        for para_text in paragraphs:
+            if para_text.strip():
+                # Escape XML special characters (but preserve UTF-8)
+                safe_text = para_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                para = Paragraph(safe_text, normal_style)
+                story.append(para)
+                story.append(Spacer(1, 0.2*cm))
+
+        # Build PDF
+        doc.build(story)
+
+        # Get PDF bytes
+        buffer.seek(0)
+        pdf_bytes = buffer.read()
+
+        print(f"✅ [create_pdf_from_text] PDF created with Turkish character support ({len(pdf_bytes)} bytes)")
+        return pdf_bytes
+
+    except Exception as e:
+        raise ValueError(f"Failed to create PDF from text: {str(e)}")
+
 
 async def verify_chatbox_ownership(chatbox_id: str, current_user: dict, supabase) -> dict:
     """
@@ -813,6 +964,10 @@ async def get_chatbox_products(
                 if product_data.get('store'):
                     product_data['store_name'] = product_data['store']['name']
                     product_data.pop('store', None)
+                
+                # price değerini string'e çevir (ProductBasicInfo şeması str bekliyor)
+                if 'price' in product_data and product_data['price'] is not None:
+                    product_data['price'] = str(product_data['price'])
 
                 relation_data = {
                     'id': item['id'],
@@ -904,6 +1059,10 @@ async def add_product_to_chatbox(
         if product_data.get('store'):
             product_data['store_name'] = product_data['store']['name']
             product_data.pop('store', None)
+        
+        # price değerini string'e çevir (ProductBasicInfo şeması str bekliyor)
+        if 'price' in product_data and product_data['price'] is not None:
+            product_data['price'] = str(product_data['price'])
 
         relation_response = {
             'id': item['id'],
@@ -980,6 +1139,10 @@ async def update_chatbox_product_relation(
         if product_data.get('store'):
             product_data['store_name'] = product_data['store']['name']
             product_data.pop('store', None)
+        
+        # price değerini string'e çevir (ProductBasicInfo şeması str bekliyor)
+        if 'price' in product_data and product_data['price'] is not None:
+            product_data['price'] = str(product_data['price'])
 
         relation_response = {
             'id': item['id'],
@@ -1207,15 +1370,26 @@ async def upload_knowledge_source(
             }
         )
 
+        # Extract text from PDF
+        try:
+            extracted_text = extract_text_from_pdf(file_content)
+            pdf_status = "processed"  # İşlem başarılı (DB'de allowed: pending, processing, ready, processed, failed)
+        except Exception as e:
+            extracted_text = None
+            pdf_status = "failed"
+            print(f"❌ PDF metin çıkarma hatası: {str(e)}")
+
         # Create database record
         knowledge_data = {
-            "chatbox_id": str(chatbox_id),
+            "chatbot_id": str(chatbox_id),
             "source_type": "pdf",
             "source_name": file.filename,
             "storage_path": storage_path,
             "file_size": file_size,
-            "status": "pending",
-            "token_count": 0
+            "content": extracted_text,  # PDF içeriğini kaydet
+            "status": pdf_status,
+            "token_count": len(extracted_text) // 4 if extracted_text else 0,  # Yaklaşık token sayısı
+            "is_active": True  # Varsayılan olarak aktif
         }
 
         result = supabase.table("knowledge_base_entries").insert(knowledge_data).execute()
@@ -1332,6 +1506,117 @@ async def get_knowledge_source_status(
         )
 
 
+@router.patch("/{chatbox_id}/knowledge-sources/{source_id}/content", response_model=KnowledgeSourceResponse)
+async def update_knowledge_source_content(
+    chatbox_id: UUID,
+    source_id: UUID,
+    body: KnowledgeSourceContentUpdate,
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Update knowledge source content (user edited)
+
+    - Updates PDF content in database
+    - Recalculates token count
+    - Updates timestamp
+    """
+    try:
+        # Verify ownership
+        await verify_chatbox_ownership(str(chatbox_id), current_user, supabase)
+
+        # Check if source exists
+        check_result = supabase.table("knowledge_base_entries").select("id").eq(
+            "id", str(source_id)
+        ).eq("chatbot_id", str(chatbox_id)).execute()
+
+        if not check_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge source not found"
+            )
+
+        # Calculate new token count (rough estimate: characters / 4)
+        new_token_count = len(body.content) // 4 if body.content else 0
+
+        # Update content
+        update_result = supabase.table("knowledge_base_entries").update({
+            "content": body.content,
+            "token_count": new_token_count,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", str(source_id)).eq("chatbot_id", str(chatbox_id)).execute()
+
+        if not update_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update knowledge source content"
+            )
+
+        return KnowledgeSourceResponse(**update_result.data[0])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update knowledge source content: {str(e)}"
+        )
+
+
+@router.patch("/{chatbox_id}/knowledge-sources/{source_id}/toggle", response_model=KnowledgeSourceResponse)
+async def toggle_knowledge_source_status(
+    chatbox_id: UUID,
+    source_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Toggle knowledge source active/inactive status
+
+    - Switches between active and inactive
+    - Returns updated knowledge source
+    """
+    try:
+        # Verify ownership
+        await verify_chatbox_ownership(str(chatbox_id), current_user, supabase)
+
+        # Get current status
+        result = supabase.table("knowledge_base_entries").select(
+            "is_active"
+        ).eq("id", str(source_id)).eq("chatbot_id", str(chatbox_id)).execute()
+
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge source not found"
+            )
+
+        current_status = result.data[0].get('is_active', True)
+        new_status = not current_status
+
+        # Update status
+        update_result = supabase.table("knowledge_base_entries").update({
+            "is_active": new_status,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", str(source_id)).eq("chatbot_id", str(chatbox_id)).execute()
+
+        if not update_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update knowledge source status"
+            )
+
+        return KnowledgeSourceResponse(**update_result.data[0])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to toggle knowledge source status: {str(e)}"
+        )
+
+
 @router.delete("/{chatbox_id}/knowledge-sources/{source_id}", response_model=StatusResponse)
 async def delete_knowledge_source(
     chatbox_id: UUID,
@@ -1394,6 +1679,133 @@ async def delete_knowledge_source(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete knowledge source: {str(e)}"
+        )
+
+
+@router.post("/{chatbox_id}/knowledge-sources/create-edited", response_model=KnowledgeSourceResponse, status_code=status.HTTP_201_CREATED)
+async def create_edited_pdf(
+    chatbox_id: UUID,
+    request: CreateEditedPDFRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Create edited PDF from modified content
+
+    - Makes original PDF inactive
+    - Creates new PDF record with edited content
+    - New PDF name: [original_name]-Düzenlenmiş.pdf
+    - New PDF is active by default
+    """
+    try:
+        # Verify chatbox ownership
+        await verify_chatbox_ownership(str(chatbox_id), current_user, supabase)
+
+        chatbox_id_str = str(chatbox_id)
+        original_source_id_str = str(request.original_source_id)
+
+        # Get original PDF source
+        original_result = supabase.table("knowledge_base_entries").select("*").eq(
+            "id", original_source_id_str
+        ).eq("chatbot_id", chatbox_id_str).execute()
+
+        if not original_result.data or len(original_result.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Original PDF not found"
+            )
+
+        original_source = original_result.data[0]
+
+        # Make original PDF inactive
+        supabase.table("knowledge_base_entries").update({
+            "is_active": False,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", original_source_id_str).execute()
+
+        # Create new filename: [original_name]-Düzenlenmiş.pdf
+        original_name = original_source.get("source_name", "document.pdf")
+        if original_name.lower().endswith('.pdf'):
+            name_without_ext = original_name[:-4]
+            edited_name = f"{name_without_ext}-Düzenlenmiş.pdf"
+        else:
+            edited_name = f"{original_name}-Düzenlenmiş.pdf"
+
+        # Create PDF from edited content
+        try:
+            pdf_bytes = create_pdf_from_text(request.edited_content, edited_name)
+            pdf_size = len(pdf_bytes)
+            print(f"📄 [create_edited_pdf] PDF oluşturuldu: {edited_name} ({pdf_size} bytes)")
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate PDF: {str(e)}"
+            )
+
+        # Upload to Supabase Storage
+        new_pdf_id = uuid4()
+        # Sanitize filename for storage (remove Turkish characters)
+        safe_filename = sanitize_filename(edited_name)
+        storage_path = f"{chatbox_id_str}/{new_pdf_id}_{safe_filename}"
+
+        try:
+            upload_result = supabase.storage.from_("chatbox-knowledge").upload(
+                storage_path,
+                pdf_bytes,
+                {
+                    "content-type": "application/pdf",
+                    "upsert": "false"
+                }
+            )
+            print(f"☁️  [create_edited_pdf] Storage'a yüklendi: {storage_path}")
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to upload PDF to storage: {str(e)}"
+            )
+
+        # Create new PDF record
+        new_source_data = {
+            "chatbot_id": chatbox_id_str,
+            "source_type": "pdf",
+            "source_name": edited_name,
+            "content": request.edited_content,
+            "token_count": len(request.edited_content) // 4,  # Approximate token count
+            "status": "processed",
+            "is_active": True,
+            "storage_path": storage_path,  # New storage path
+            "file_size": pdf_size,  # New file size
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+
+        result = supabase.table("knowledge_base_entries").insert(new_source_data).execute()
+
+        if not result.data:
+            # Clean up uploaded file if database insert fails
+            try:
+                supabase.storage.from_("chatbox-knowledge").remove([storage_path])
+            except:
+                pass
+
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create edited PDF record"
+            )
+
+        print(f"✅ [create_edited_pdf] Düzenlenmiş PDF oluşturuldu: {edited_name}")
+        print(f"   - Orijinal PDF ({original_name}) pasif yapıldı")
+        print(f"   - Yeni PDF aktif: {edited_name}")
+        print(f"   - Storage path: {storage_path}")
+
+        return KnowledgeSourceResponse(**result.data[0])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create edited PDF: {str(e)}"
         )
 
 
@@ -1515,4 +1927,126 @@ async def get_chatbox_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get chatbox statistics: {str(e)}"
+        )
+
+
+# ============================================================================
+# CHATBOX INTEGRATIONS (STORES & PRODUCTS)
+# ============================================================================
+
+@router.put("/{chatbox_id}/integrations", response_model=ChatboxIntegrationsResponse)
+async def update_chatbox_integrations(
+    chatbox_id: UUID,
+    integrations: ChatboxIntegrationsUpdate,
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Update chatbox integrations (stores and products) - Replaces all existing integrations
+    
+    This endpoint:
+    1. Verifies chatbox ownership
+    2. Deletes all existing store and product integrations
+    3. Creates new integrations based on the request
+    4. Handles "stores_only" flag for stores without product display
+    
+    Args:
+        chatbox_id: Chatbox UUID
+        integrations: New integrations (stores and products)
+        current_user: Authenticated user
+        supabase: Supabase client
+        
+    Returns:
+        Integration update summary with counts
+    """
+    try:
+        # 1. Verify chatbox ownership
+        chatbox_response = supabase.table("chatbots")\
+            .select("id, user_id")\
+            .eq("id", str(chatbox_id))\
+            .single()\
+            .execute()
+        
+        if not chatbox_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chatbox not found"
+            )
+        
+        if chatbox_response.data["user_id"] != current_user["id"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to modify this chatbox"
+            )
+        
+        # 2. Delete existing integrations
+        # Delete store integrations
+        supabase.table("chatbox_stores")\
+            .delete()\
+            .eq("chatbox_id", str(chatbox_id))\
+            .execute()
+        
+        # Delete product integrations
+        supabase.table("chatbox_products")\
+            .delete()\
+            .eq("chatbox_id", str(chatbox_id))\
+            .execute()
+        
+        # 3. Create new store integrations
+        stores_added = 0
+        stores_only_ids = set(str(sid) for sid in integrations.stores_only)
+        
+        if integrations.stores:
+            store_records = []
+            for store_integration in integrations.stores:
+                # Check if this store is marked as "stores only"
+                is_store_only = str(store_integration.store_id) in stores_only_ids
+                
+                store_records.append({
+                    "chatbox_id": str(chatbox_id),
+                    "store_id": str(store_integration.store_id),
+                    "show_on_homepage": not is_store_only and store_integration.show_on_homepage,
+                    "show_on_products": not is_store_only and store_integration.show_on_products,
+                    "position": store_integration.position,
+                    "is_active": store_integration.is_active
+                })
+            
+            if store_records:
+                result = supabase.table("chatbox_stores")\
+                    .insert(store_records)\
+                    .execute()
+                stores_added = len(result.data) if result.data else 0
+        
+        # 4. Create new product integrations
+        products_added = 0
+        if integrations.products:
+            product_records = []
+            for product_integration in integrations.products:
+                product_records.append({
+                    "chatbox_id": str(chatbox_id),
+                    "product_id": str(product_integration.product_id),
+                    "show_on_product_page": product_integration.show_on_product_page,
+                    "is_active": product_integration.is_active
+                })
+            
+            if product_records:
+                result = supabase.table("chatbox_products")\
+                    .insert(product_records)\
+                    .execute()
+                products_added = len(result.data) if result.data else 0
+        
+        return ChatboxIntegrationsResponse(
+            stores_added=stores_added,
+            products_added=products_added,
+            stores_removed=0,  # We delete all before adding
+            products_removed=0,  # We delete all before adding
+            message=f"Successfully updated integrations: {stores_added} stores and {products_added} products"
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update integrations: {str(e)}"
         )

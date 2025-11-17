@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeft, Plus, MessageSquare, Upload, X } from 'lucide-react'
+import { ArrowLeft, Plus, MessageSquare, Upload, X, Save } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { SketchPicker } from 'react-color'
 import ChatboxElements from './ChatboxElements'
@@ -218,32 +218,24 @@ export default function ChatboxCreate({ themeColors, storeList, onBack, onSave }
             </div>
 
             {/* Butonlar */}
-            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 pt-3 sm:pt-4">
+            <div className="flex items-center space-x-2 sm:space-x-3 pt-3 sm:pt-4">
               <button
                 onClick={onBack}
-                className="flex-1 px-4 sm:px-6 py-2 sm:py-3 border border-gray-200 text-[#666] rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base"
+                className="flex items-center justify-center text-gray-600 hover:text-gray-800 p-1 sm:p-1.5 rounded-lg font-medium border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 transition-all duration-300 hover:scale-105"
+                title="Vazgeç"
               >
-                İptal
+                <ArrowLeft className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
               </button>
               <button
                 onClick={handleSave}
                 disabled={!newChatbox.name}
-                className="flex-1 px-4 sm:px-6 py-2 sm:py-3 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                className="flex items-center space-x-1 text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-300 hover:scale-105 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`,
                 }}
-                onMouseEnter={(e) => {
-                  if (!e.currentTarget.disabled) {
-                    e.currentTarget.style.transform = 'scale(1.02)';
-                    e.currentTarget.style.boxShadow = `0 4px 12px ${themeColors.primary}40`;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
               >
-                Chatbox Oluştur
+                <Save className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
+                <span>Kaydet</span>
               </button>
             </div>
 

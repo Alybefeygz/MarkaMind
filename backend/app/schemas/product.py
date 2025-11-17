@@ -11,9 +11,9 @@ class ProductBase(BaseModel):
     slug: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     short_description: Optional[str] = Field(None, max_length=500)
-    price: Decimal = Field(..., ge=0, decimal_places=2)
-    compare_at_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    cost_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
+    price: Decimal = Field(..., ge=0)
+    compare_at_price: Optional[Decimal] = Field(None, ge=0)
+    cost_price: Optional[Decimal] = Field(None, ge=0)
     category: str = Field(..., min_length=1, max_length=100)
     subcategory: Optional[str] = Field(None, max_length=100)
     sku: Optional[str] = Field(None, max_length=100)
@@ -21,7 +21,7 @@ class ProductBase(BaseModel):
     stock_quantity: int = Field(0, ge=0)
     track_inventory: bool = True
     allow_backorder: bool = False
-    weight: Optional[Decimal] = Field(None, ge=0, decimal_places=3)
+    weight: Optional[Decimal] = Field(None, ge=0)
     dimensions: Dict[str, Any] = Field(default_factory=dict)
     status: str = Field("draft", pattern="^(draft|active|archived)$")
     featured: bool = False
@@ -61,9 +61,9 @@ class ProductUpdate(BaseModel):
     slug: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     short_description: Optional[str] = Field(None, max_length=500)
-    price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    compare_at_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    cost_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
+    price: Optional[Decimal] = Field(None, ge=0)
+    compare_at_price: Optional[Decimal] = Field(None, ge=0)
+    cost_price: Optional[Decimal] = Field(None, ge=0)
     category: Optional[str] = Field(None, min_length=1, max_length=100)
     subcategory: Optional[str] = Field(None, max_length=100)
     sku: Optional[str] = Field(None, max_length=100)
@@ -71,7 +71,7 @@ class ProductUpdate(BaseModel):
     stock_quantity: Optional[int] = Field(None, ge=0)
     track_inventory: Optional[bool] = None
     allow_backorder: Optional[bool] = None
-    weight: Optional[Decimal] = Field(None, ge=0, decimal_places=3)
+    weight: Optional[Decimal] = Field(None, ge=0)
     dimensions: Optional[Dict[str, Any]] = None
     status: Optional[str] = Field(None, pattern="^(draft|active|archived)$")
     featured: Optional[bool] = None

@@ -214,10 +214,26 @@ class ChatboxStoreBulkResponse(BaseModel):
     results: List[Dict[str, Any]]
 
 
+class ChatboxIntegrationsUpdate(BaseModel):
+    """Update chatbox integrations (stores and products together)"""
+    stores: List[ChatboxStoreRelationCreate] = Field(default_factory=list, description="Store integrations")
+    products: List[ChatboxProductRelationCreate] = Field(default_factory=list, description="Product integrations")
+    stores_only: List[UUID] = Field(default_factory=list, description="Store IDs marked as 'stores only'")
+
+
+class ChatboxIntegrationsResponse(BaseModel):
+    """Response for integration update"""
+    stores_added: int
+    products_added: int
+    stores_removed: int
+    products_removed: int
+    message: str
+
+
 class KnowledgeSourceResponse(BaseModel):
     """Knowledge source (PDF) response"""
     id: UUID
-    chatbox_id: UUID
+    chatbot_id: UUID
     source_type: str
     source_name: str
     storage_path: str
@@ -225,10 +241,17 @@ class KnowledgeSourceResponse(BaseModel):
     status: str
     token_count: int
     error_message: Optional[str] = None
+    is_active: bool = True
+    content: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class KnowledgeSourceContentUpdate(BaseModel):
+    """Update knowledge source content"""
+    content: str = Field(..., min_length=1, description="Updated PDF content")
 
 
 class KnowledgeSourceStatusResponse(BaseModel):
@@ -239,6 +262,12 @@ class KnowledgeSourceStatusResponse(BaseModel):
     error_message: Optional[str] = None
     token_count: int
     processed_at: Optional[datetime] = None
+
+
+class CreateEditedPDFRequest(BaseModel):
+    """Request to create edited PDF from modified content"""
+    original_source_id: UUID = Field(..., description="ID of the original PDF source")
+    edited_content: str = Field(..., min_length=1, description="Edited PDF content")
 
 
 class ChatboxStats(BaseModel):
