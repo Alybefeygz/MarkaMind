@@ -31,7 +31,7 @@ export default function Home() {
   
   // Chatbox dropdown state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const [selectedChatbox, setSelectedChatbox] = useState<{ id?: string; name: string }>({ name: 'Chatbox Seçin' })
+  const [selectedChatbox, setSelectedChatbox] = useState<ChatboxResponse | null>(null)
   
   // Chatbox tab state
   const [activeTab, setActiveTab] = useState('Önizleme')
@@ -143,11 +143,24 @@ export default function Home() {
       setIsLoadingChatboxes(true)
       try {
         const response = await getUserChatboxes(1, 100) // İlk 100 chatbox
+
+        // DEBUG: Backend'den gelen chatbox verilerini logla
+        console.log('🔍 Backend Response:', response.items)
+        if (response.items.length > 0) {
+          console.log('🔍 İlk Chatbox Detayı:', {
+            name: response.items[0].name,
+            button_primary_color: response.items[0].button_primary_color,
+            button_border_color: response.items[0].button_border_color,
+            button_icon_color: response.items[0].button_icon_color,
+            primary_color: response.items[0].primary_color
+          })
+        }
+
         setChatboxList(response.items)
 
-        // İlk chatbox'ı seçili yap
+        // İlk chatbox'ı seçili yap - TÜM verileri koru (renkler dahil)
         if (response.items.length > 0) {
-          setSelectedChatbox({ id: response.items[0].id, name: response.items[0].name })
+          setSelectedChatbox(response.items[0])
         }
       } catch (error) {
         console.error('Chatbox\'lar yüklenirken hata:', error)
@@ -302,7 +315,7 @@ export default function Home() {
                 >
                   <div className="flex items-center space-x-1 sm:space-x-2 flex-1 min-w-0">
                     <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: chatboxList.find(cb => cb.id === selectedChatbox?.id)?.primary_color || themeColors.primary }} />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedChatbox.name}</span>
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedChatbox?.name || 'Chatbox Seçin'}</span>
                   </div>
                   <ChevronDown className={`w-3 sm:w-4 h-3 sm:h-4 text-gray-500 flex-shrink-0 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -323,7 +336,7 @@ export default function Home() {
                         <div
                           key={chatbox.id}
                           onClick={() => {
-                            setSelectedChatbox({ id: chatbox.id, name: chatbox.name })
+                            setSelectedChatbox(chatbox)
                             setIsDropdownOpen(false)
                           }}
                           className="flex items-center justify-between p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
@@ -395,7 +408,7 @@ export default function Home() {
                 >
                   <div className="flex items-center space-x-1 sm:space-x-2 flex-1 min-w-0">
                     <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: chatboxList.find(cb => cb.id === selectedChatbox?.id)?.primary_color || themeColors.primary }} />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedChatbox.name}</span>
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedChatbox?.name || 'Chatbox Seçin'}</span>
                   </div>
                   <ChevronDown className={`w-3 sm:w-4 h-3 sm:h-4 text-gray-500 flex-shrink-0 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -416,7 +429,7 @@ export default function Home() {
                         <div
                           key={chatbox.id}
                           onClick={() => {
-                            setSelectedChatbox({ id: chatbox.id, name: chatbox.name })
+                            setSelectedChatbox(chatbox)
                             setIsDropdownOpen(false)
                           }}
                           className="flex items-center justify-between p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
@@ -580,8 +593,8 @@ export default function Home() {
                           const response = await getUserChatboxes(1, 100)
                           setChatboxList(response.items)
 
-                          // Yeni oluşturulan chatbox'ı seç
-                          setSelectedChatbox({ id: result.id, name: result.name })
+                          // Yeni oluşturulan chatbox'ı seç - TÜM verileri koru (renkler dahil)
+                          setSelectedChatbox(result)
 
                           // Formu tema renkleriyle sıfırla ve geri dön
                           setNewChatboxData({
@@ -644,7 +657,7 @@ export default function Home() {
           {/* Diğer Sayfalar */}
           {showOtherPage && (
             <>
-              {currentPage === 1 && <ChatboxManagement selectedChatbox={selectedChatbox} activeTab={activeTab} themeColors={themeColors} storeList={storeList} productList={productList} isCreatingNew={isCreatingNewChatbox} onCancelCreate={() => {
+              {currentPage === 1 && <ChatboxManagement key={selectedChatbox?.id} selectedChatbox={selectedChatbox} activeTab={activeTab} themeColors={themeColors} storeList={storeList} productList={productList} chatboxList={chatboxList} isCreatingNew={isCreatingNewChatbox} onCancelCreate={() => {
                 // State'i tema renkleriyle reset et
                 setNewChatboxData({
                   name: '',

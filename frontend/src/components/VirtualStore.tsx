@@ -4,7 +4,7 @@ import { Store, MoreHorizontal, ArrowLeft, Star, Plus, X, Upload } from 'lucide-
 import { useState, useEffect, useRef } from 'react'
 import { SketchPicker } from 'react-color'
 import VirtualStoreChatboxAndButtons from './VirtualStoreChatboxAndButtons'
-import { createProduct, uploadProductImages, generateSlug, getProductReviews, getStoreProducts, getProductImages } from '@/lib/api'
+import { createProduct, uploadProductImages, generateSlug, getProductReviews, getStoreProducts, getProductImages, getChatboxByStore, getChatboxByProduct, type ChatboxResponse } from '@/lib/api'
 
 // Mağaza verileri artık prop olarak geliyor
 
@@ -119,6 +119,10 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   const [productReviews, setProductReviews] = useState([])
   const [isLoadingReviews, setIsLoadingReviews] = useState(false)
 
+  // Chatbox entegrasyonu için state'ler
+  const [chatboxConfig, setChatboxConfig] = useState<ChatboxResponse | null>(null)
+  const [isLoadingChatbox, setIsLoadingChatbox] = useState(false)
+
   // Ürün listesi state'i
   const [products, setProducts] = useState(productList)
 
@@ -194,6 +198,46 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     }, 100)
     return () => clearTimeout(timer)
   }, [])
+
+  // Seçili mağaza için chatbox yükle
+  useEffect(() => {
+    const loadChatbox = async () => {
+      if (!selectedStore?.id) {
+        setChatboxConfig(null)
+        return
+      }
+
+      setIsLoadingChatbox(true)
+      try {
+        // Eğer ürün seçiliyse, SADECE ürün için chatbox yükle
+        if (selectedProduct?.id) {
+          try {
+            const productChatbox = await getChatboxByProduct(selectedProduct.id)
+            setChatboxConfig(productChatbox)
+            console.log('✅ Ürün chatbox yüklendi:', productChatbox)
+          } catch (productError) {
+            // Ürün için özel chatbox yoksa, ürün detayında HİÇBİR chatbox gösterme
+            console.log('ℹ️ Bu ürün için özel chatbox bulunamadı, chatbox gizleniyor')
+            setChatboxConfig(null)
+          }
+          return
+        }
+
+        // Ana sayfa ise mağaza chatbox yükle
+        const storeChatbox = await getChatboxByStore(selectedStore.id)
+        setChatboxConfig(storeChatbox)
+        console.log('✅ Mağaza chatbox yüklendi:', storeChatbox)
+      } catch (error) {
+        // Chatbox yoksa sessizce gizle
+        console.log('ℹ️ Bu mağaza için chatbox bulunamadı')
+        setChatboxConfig(null)
+      } finally {
+        setIsLoadingChatbox(false)
+      }
+    }
+
+    loadChatbox()
+  }, [selectedStore?.id, selectedProduct?.id])
 
   // Brands listesini yükle
   useEffect(() => {
@@ -1130,22 +1174,27 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           </div>
         </div>
 
-        {/* Chatbox Component - Sağ Alt Köşe */}
-        {/* NOT: Yeni oluşturulan mağazalarda chatbox gösterilmiyor - sonradan etkinleştirilecek */}
-        {false && (
-          <div className="fixed bottom-6 right-6 z-50">
+        {/* Chatbox Component - Sağ Alt Köşe - Dinamik Entegrasyon */}
+        {chatboxConfig && (
+          <div className={`fixed z-50 ${
+            chatboxConfig.position === 'bottom-right' ? 'bottom-6 right-6' :
+            chatboxConfig.position === 'bottom-left' ? 'bottom-6 left-6' :
+            chatboxConfig.position === 'top-right' ? 'top-6 right-6' :
+            chatboxConfig.position === 'top-left' ? 'top-6 left-6' :
+            'bottom-6 right-6' // default
+          }`}>
             <VirtualStoreChatboxAndButtons
-              chatboxTitle={`${selectedStore.name} Asistanı`}
-              initialMessage={`Merhaba! ${selectedProduct.name} hakkında size nasıl yardımcı olabilirim?`}
+              chatboxTitle={chatboxConfig.chatbox_title}
+              initialMessage={chatboxConfig.initial_message}
               colors={{
-                primary: selectedStore.primaryColor,
-                aiMessage: '#E5E7EB',
-                userMessage: selectedStore.primaryColor,
-                borderColor: selectedStore.primaryColor,
-                aiTextColor: '#1F2937',
-                userTextColor: '#FFFFFF',
-                buttonPrimary: selectedStore.primaryColor,
-                buttonIcon: '#FFFFFF'
+                primary: chatboxConfig.primary_color,
+                aiMessage: chatboxConfig.ai_message_color,
+                userMessage: chatboxConfig.user_message_color,
+                borderColor: chatboxConfig.button_border_color,
+                aiTextColor: chatboxConfig.ai_text_color,
+                userTextColor: chatboxConfig.user_text_color,
+                buttonPrimary: chatboxConfig.button_primary_color,
+                buttonIcon: chatboxConfig.button_icon_color
               }}
               isVisible={isChatboxVisible}
               onToggle={() => setIsChatboxVisible(!isChatboxVisible)}
@@ -2374,22 +2423,31 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           </div>
         )}
 
-        {/* Chatbox Component - Sağ Alt Köşe */}
-        {/* NOT: Yeni oluşturulan mağazalarda chatbox gösterilmiyor - sonradan etkinleştirilecek */}
-        {false && (
-          <div className="fixed bottom-6 right-6 z-50">
+        {/* Chatbox Component - Sağ Alt Köşe - Dinamik Entegrasyon */}
+        {chatboxConfig && (
+          // Ana sayfa ise show_on_homepage kontrolü yap
+          // Ürün sayfası ise zaten sadece ürün chatbox'ı yüklenmiş, göster
+          selectedProduct !== null || chatboxConfig.show_on_homepage
+        ) && (
+          <div className={`fixed z-50 ${
+            chatboxConfig.position === 'bottom-right' ? 'bottom-6 right-6' :
+            chatboxConfig.position === 'bottom-left' ? 'bottom-6 left-6' :
+            chatboxConfig.position === 'top-right' ? 'top-6 right-6' :
+            chatboxConfig.position === 'top-left' ? 'top-6 left-6' :
+            'bottom-6 right-6' // default
+          }`}>
             <VirtualStoreChatboxAndButtons
-              chatboxTitle={`${selectedStore.name} Asistanı`}
-              initialMessage={`Merhaba! ${selectedStore.name} mağazasına hoş geldiniz. Size nasıl yardımcı olabilirim?`}
+              chatboxTitle={chatboxConfig.chatbox_title}
+              initialMessage={chatboxConfig.initial_message}
               colors={{
-                primary: selectedStore.primaryColor,
-                aiMessage: '#E5E7EB',
-                userMessage: selectedStore.primaryColor,
-                borderColor: selectedStore.primaryColor,
-                aiTextColor: '#1F2937',
-                userTextColor: '#FFFFFF',
-                buttonPrimary: selectedStore.primaryColor,
-                buttonIcon: '#FFFFFF'
+                primary: chatboxConfig.primary_color,
+                aiMessage: chatboxConfig.ai_message_color,
+                userMessage: chatboxConfig.user_message_color,
+                borderColor: chatboxConfig.button_border_color,
+                aiTextColor: chatboxConfig.ai_text_color,
+                userTextColor: chatboxConfig.user_text_color,
+                buttonPrimary: chatboxConfig.button_primary_color,
+                buttonIcon: chatboxConfig.button_icon_color
               }}
               isVisible={isChatboxVisible}
               onToggle={() => setIsChatboxVisible(!isChatboxVisible)}

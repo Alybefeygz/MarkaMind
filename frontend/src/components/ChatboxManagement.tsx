@@ -4,9 +4,15 @@ import { ChevronDown, Plus, MessageSquare, Settings, Trash2, Eye, ArrowLeft, Sen
 import { useState, useEffect, useRef, useMemo } from 'react'
 import ChatboxPrivatization from './ChatboxPrivatization'
 import ChatboxElements from './ChatboxElements'
-import { getUserStores, getStoreProducts, getChatboxKnowledgeSources, uploadKnowledgeSource, toggleKnowledgeSourceStatus, deleteKnowledgeSource, createEditedPDF, getChatboxStores, getChatboxProducts, getProductImages, createChatbox, getUserChatboxes, updateChatboxIntegrations, deleteChatbox, type Store, type ProductListItem, type KnowledgeSourceResponse, type ChatboxStoreRelation, type ChatboxProductRelation, type ChatboxCreate } from '../lib/api'
+import { getUserStores, getStoreProducts, getChatboxKnowledgeSources, uploadKnowledgeSource, toggleKnowledgeSourceStatus, deleteKnowledgeSource, createEditedPDF, getChatboxStores, getChatboxProducts, getProductImages, createChatbox, getUserChatboxes, updateChatboxIntegrations, deleteChatbox, getAllChatboxIntegrations, type Store, type ProductListItem, type KnowledgeSourceResponse, type ChatboxStoreRelation, type ChatboxProductRelation, type ChatboxCreate } from '../lib/api'
 
-export default function ChatboxManagement({ selectedChatbox, activeTab, themeColors, storeList, productList, isCreatingNew, onCancelCreate, chatboxData, setChatboxData }) {
+export default function ChatboxManagement({ selectedChatbox, activeTab, themeColors, storeList, productList, chatboxList, isCreatingNew, onCancelCreate, chatboxData, setChatboxData }) {
+  // DEBUG: Component mount kontrolü
+  console.log('🔄 ChatboxManagement MOUNT/RE-RENDER:', {
+    chatboxId: selectedChatbox?.id,
+    chatboxName: selectedChatbox?.name
+  })
+
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isChatboxVisible, setIsChatboxVisible] = useState(true)
   const [isLoadingChatboxData, setIsLoadingChatboxData] = useState(!isCreatingNew && selectedChatbox?.id ? true : false)
@@ -67,7 +73,6 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   const [selectedStores, setSelectedStores] = useState([])
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false)
   const storeDropdownRef = useRef(null)
-  const [storesOnly, setStoresOnly] = useState<Set<string>>(new Set()) // Sadece mağaza olarak işaretlenen mağazalar
 
   // Ürün seçimi state'leri
   const [selectedProducts, setSelectedProducts] = useState([])
@@ -80,16 +85,26 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null)
   const [isLoadingStores, setIsLoadingStores] = useState(false)
   const [isLoadingProducts, setIsLoadingProducts] = useState(false)
-  
+  const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(false)
+
   // Ürün görselleri için cache
   const [productImages, setProductImages] = useState<Record<string, string>>({})
 
   // Integration change tracking
   const [originalStores, setOriginalStores] = useState<string[]>([])
   const [originalProducts, setOriginalProducts] = useState<string[]>([])
-  const [originalStoresOnly, setOriginalStoresOnly] = useState<Set<string>>(new Set())
   const [hasIntegrationChanges, setHasIntegrationChanges] = useState(false)
   const [isSavingIntegrations, setIsSavingIntegrations] = useState(false)
+
+  // Çakışma kontrolü için tüm chatbox entegrasyonları
+  const [allIntegrations, setAllIntegrations] = useState<Record<string, {
+    chatbox_name: string
+    stores: string[]
+    products: string[]
+    stores_only: string[]
+  }>>({})
+  const [conflictingStores, setConflictingStores] = useState<Record<string, string>>({}) // store_id -> chatbox_name
+  const [conflictingProducts, setConflictingProducts] = useState<Record<string, string>>({}) // product_id -> chatbox_name
 
   // Mevcut chatbox verileri için local state
   const [localChatboxData, setLocalChatboxData] = useState({
@@ -159,6 +174,65 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     loadKnowledgeSources()
   }, [activeTab, selectedChatbox?.id, createdChatboxId, isCreatingNew])
 
+  // Tüm chatbox entegrasyonlarını yükle (çakışma kontrolü için)
+  useEffect(() => {
+    const loadAllIntegrations = async () => {
+      if (activeTab === 'Entegrasyonlar') {
+        // ADIM 1: Loading'i başlat (State temizlemeye gerek yok - component key ile yeniden mount oluyor)
+        setIsLoadingIntegrations(true)
+
+        try {
+          // ADIM 2: Yeni entegrasyonları yükle
+          const integrations = await getAllChatboxIntegrations()
+          setAllIntegrations(integrations)
+
+          // Çakışan mağaza ve ürünleri tespit et
+          const conflictStores: Record<string, string> = {}
+          const conflictProducts: Record<string, string> = {}
+
+          Object.entries(integrations).forEach(([chatboxId, data]) => {
+            // Debug log
+            console.log('🔍 Çakışma kontrolü:', {
+              chatboxId,
+              selectedChatboxId: selectedChatbox?.id,
+              isEqual: chatboxId === selectedChatbox?.id,
+              chatboxName: data.chatbox_name
+            })
+
+            // Mevcut chatbox'u dahil etme
+            if (chatboxId === selectedChatbox?.id) {
+              console.log('✅ Mevcut chatbox, atlanıyor:', chatboxId)
+              return
+            }
+
+            // Mağazaları kontrol et
+            data.stores.forEach(storeId => {
+              conflictStores[storeId] = data.chatbox_name
+            })
+
+            // Ürünleri kontrol et (stores_only olanlar hariç)
+            data.products.forEach(productId => {
+              conflictProducts[productId] = data.chatbox_name
+            })
+
+            // Stores_only olanları conflict stores'dan çıkar (ürünleri seçilebilir olsun)
+            // Ama mağazanın kendisi hala seçilemez
+          })
+
+          setConflictingStores(conflictStores)
+          setConflictingProducts(conflictProducts)
+        } catch (error) {
+          console.error('Entegrasyonlar yüklenirken hata:', error)
+        } finally {
+          // ADIM 3: Loading'i bitir
+          setIsLoadingIntegrations(false)
+        }
+      }
+    }
+
+    loadAllIntegrations()
+  }, [activeTab, selectedChatbox?.id])
+
   // Mağazaları backend'den yükle
   useEffect(() => {
     const loadStores = async () => {
@@ -168,86 +242,65 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
           const stores = await getUserStores()
           setBackendStores(stores)
 
+          // TÜM mağazaların TÜM ürünlerini yükle (mağaza seçiminden bağımsız)
+          setIsLoadingProducts(true)
+          try {
+            const allProducts: ProductListItem[] = []
+
+            // Tüm mağazaların ürünlerini yükle
+            for (const store of stores) {
+              const response = await getStoreProducts(store.id, 1, 100)
+              allProducts.push(...response.items)
+            }
+
+            setBackendProducts(allProducts)
+
+            // İlk mağazanın brand_id'sini kaydet (chatbox oluşturma için)
+            if (stores.length > 0 && !selectedBrandId) {
+              setSelectedBrandId(stores[0].brand_id)
+            }
+          } catch (error) {
+            console.error('Ürünler yüklenirken hata:', error)
+          } finally {
+            setIsLoadingProducts(false)
+          }
+
           // Mevcut chatbox için entegrasyon verilerini yükle
           if (selectedChatbox?.id && !isCreatingNew) {
             try {
+              console.log('📦 Chatbox entegrasyonları yükleniyor...', selectedChatbox.id)
+
               // Chatbox'a bağlı mağazaları yükle
               const chatboxStores = await getChatboxStores(selectedChatbox.id)
+              console.log('🏪 Yüklenen mağazalar:', chatboxStores)
               const integratedStoreIds = chatboxStores.map(rel => rel.store.id)
+              console.log('🏪 Mağaza ID\'leri:', integratedStoreIds)
               setSelectedStores(integratedStoreIds)
               setOriginalStores(integratedStoreIds) // Orijinal değeri kaydet
 
-              // show_on_products: false olan mağazaları "Sadece Mağaza" olarak işaretle
-              const storesOnlyIds = chatboxStores
-                .filter(rel => !rel.show_on_products)
-                .map(rel => rel.store.id)
-              setStoresOnly(new Set(storesOnlyIds))
-              setOriginalStoresOnly(new Set(storesOnlyIds))
-
-              // Seçili mağazaların ürünlerini yükle
-              if (integratedStoreIds.length > 0) {
-                setIsLoadingProducts(true)
-                try {
-                  const allProducts: ProductListItem[] = []
-                  
-                  // "Sadece Mağaza" işaretli mağazaları filtrele
-                  const storesOnlySet = new Set(storesOnlyIds)
-                  const storeIdsToLoad = integratedStoreIds.filter(storeId => !storesOnlySet.has(storeId))
-                  
-                  if (storeIdsToLoad.length > 0) {
-                    for (const storeId of storeIdsToLoad) {
-                      const response = await getStoreProducts(storeId, 1, 100)
-                      allProducts.push(...response.items)
-                    }
-                  }
-                  
-                  setBackendProducts(allProducts)
-
-                  // Chatbox'a bağlı ürünleri yükle
-                  const chatboxProducts = await getChatboxProducts(selectedChatbox.id)
-                  const integratedProductIds = chatboxProducts.map(rel => rel.product.id)
-                  
-                  // Backend'de yüklenen ürünlerden sadece mevcut olanları seç
-                  const validProductIds = integratedProductIds.filter(prodId =>
-                    allProducts.some(p => p.id === prodId)
-                  )
-                  
-                  setSelectedProducts(validProductIds)
-                  setOriginalProducts(validProductIds) // Orijinal değeri kaydet
-                } catch (error) {
-                  console.error('Ürünler yüklenirken hata:', error)
-                  // Ürün yükleme hatası durumunda orijinal ürünleri boş yap
-                  setSelectedProducts([])
-                  setOriginalProducts([])
-                } finally {
-                  setIsLoadingProducts(false)
-                }
-              } else {
-                // Hiç mağaza yoksa ürünleri de temizle
-                setSelectedProducts([])
-                setOriginalProducts([])
-                setBackendProducts([])
-              }
+              // Chatbox'a bağlı ürünleri yükle
+              const chatboxProducts = await getChatboxProducts(selectedChatbox.id)
+              console.log('📦 Yüklenen ürünler:', chatboxProducts)
+              const integratedProductIds = chatboxProducts.map(rel => rel.product.id)
+              console.log('📦 Ürün ID\'leri:', integratedProductIds)
+              setSelectedProducts(integratedProductIds)
+              setOriginalProducts(integratedProductIds) // Orijinal değeri kaydet
             } catch (error) {
-              console.error('Chatbox entegrasyonları yüklenirken hata:', error)
+              console.error('❌ Chatbox entegrasyonları yüklenirken hata:', error)
               // Hata durumunda orijinal değerleri de temizle
               setOriginalStores([])
               setOriginalProducts([])
-              setOriginalStoresOnly(new Set())
             }
           } else if (isCreatingNew) {
             // Yeni chatbox oluşturuluyorsa seçimleri ve orijinal değerleri temizle
             setSelectedStores([])
             setSelectedProducts([])
-            setBackendProducts([])
             setOriginalStores([])
             setOriginalProducts([])
-            setOriginalStoresOnly(new Set())
           } else {
             // Hiçbir koşul sağlanmadığında orijinal değerleri temizle
             setOriginalStores([])
             setOriginalProducts([])
-            setOriginalStoresOnly(new Set())
           }
         } catch (error) {
           console.error('Mağazalar yüklenirken hata:', error)
@@ -259,105 +312,6 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
     loadStores()
   }, [activeTab, selectedChatbox?.id, isCreatingNew])
-
-  // Mağaza seçildiğinde ürünleri yükle
-  useEffect(() => {
-    const loadProducts = async () => {
-      if (selectedStores.length > 0) {
-        setIsLoadingProducts(true)
-        try {
-          const allProducts: ProductListItem[] = []
-          
-          // 'all' seçiliyse tüm mağazaların ID'lerini al, değilse seçili mağaza ID'lerini al
-          const storeIdsToLoad = selectedStores.includes('all')
-            ? backendStores.map(store => store.id)
-            : selectedStores.filter(id => id !== 'all')
-
-          // "Sadece Mağaza" işaretli mağazaları filtrele
-          const storeIdsToLoadFiltered = storeIdsToLoad.filter(storeId => !storesOnly.has(storeId))
-
-          if (storeIdsToLoadFiltered.length > 0) {
-            for (const storeId of storeIdsToLoadFiltered) {
-              const response = await getStoreProducts(storeId, 1, 100)
-              allProducts.push(...response.items)
-
-              // İlk seçilen mağazanın brand_id'sini kaydet
-              if (backendStores.length > 0 && !selectedBrandId) {
-                const store = backendStores.find(s => s.id === storeId)
-                if (store) {
-                  setSelectedBrandId(store.brand_id)
-                }
-              }
-            }
-
-            setBackendProducts(allProducts)
-          } else {
-            setBackendProducts([])
-          }
-        } catch (error) {
-          console.error('Ürünler yüklenirken hata:', error)
-        } finally {
-          setIsLoadingProducts(false)
-        }
-      } else {
-        setBackendProducts([])
-        setSelectedBrandId(null)
-        setProductImages({}) // Ürün görsellerini temizle
-      }
-    }
-
-    loadProducts()
-  }, [selectedStores, backendStores, selectedBrandId, storesOnly])
-
-  // Mağaza seçimi kaldırıldığında "Sadece Mağaza" işaretini de kaldır
-  useEffect(() => {
-    const selectedStoreIds = selectedStores.filter(id => id !== 'all')
-    const allStoreIds = selectedStores.includes('all') 
-      ? backendStores.map(s => s.id)
-      : selectedStoreIds
-    
-    // Seçili olmayan mağazaların "Sadece Mağaza" işaretini kaldır
-    setStoresOnly(prev => {
-      const newSet = new Set(prev)
-      prev.forEach(storeId => {
-        if (!allStoreIds.includes(storeId)) {
-          newSet.delete(storeId)
-        }
-      })
-      return newSet
-    })
-  }, [selectedStores, backendStores])
-
-  // Backend ürünleri yüklendiğinde, chatbox'a bağlı ürünleri seç
-  useEffect(() => {
-    // Sadece mevcut chatbox için ve ürünler yeni yüklendiyse
-    if (!isCreatingNew && selectedChatbox?.id && backendProducts.length > 0 && originalProducts.length > 0) {
-      // Backend'den yüklenen ürünlerden sadece originalProducts'ta olanları seç
-      const productsToSelect = originalProducts.filter(prodId =>
-        backendProducts.some(p => p.id === prodId)
-      )
-      
-      // Eğer seçili ürünler ile orijinal ürünler eşleşmiyorsa güncelle
-      const currentSelected = [...selectedProducts].sort()
-      const shouldSelect = [...productsToSelect].sort()
-      const isDifferent = JSON.stringify(currentSelected) !== JSON.stringify(shouldSelect)
-      
-      if (isDifferent) {
-        console.log('🔄 [DEBUG] Ürünler geri yükleniyor:', {
-          currentSelected,
-          shouldSelect,
-          originalProducts,
-          backendProductsCount: backendProducts.length
-        })
-        if (productsToSelect.length > 0) {
-          setSelectedProducts(productsToSelect)
-        } else {
-          // Eğer hiçbir ürün eşleşmiyorsa, selectedProducts'ı temizle
-          setSelectedProducts([])
-        }
-      }
-    }
-  }, [backendProducts, originalProducts, isCreatingNew, selectedChatbox?.id])
 
   // Ürün seçimlerini normalize et: "Tüm Ürünler" ile tek tek tüm ürünleri seçmek aynı kabul edilir
   const normalizeProductSelection = useMemo(() => {
@@ -395,11 +349,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     const normalizedOriginal = normalizeProductSelection(originalProducts)
     const productsChanged = JSON.stringify(normalizedSelected) !== JSON.stringify(normalizedOriginal)
 
-    // StoresOnly değişikliği kontrolü
-    const storesOnlyChanged = JSON.stringify([...storesOnly].sort()) !== JSON.stringify([...originalStoresOnly].sort())
-
-    setHasIntegrationChanges(storesChanged || productsChanged || storesOnlyChanged)
-  }, [selectedStores, selectedProducts, storesOnly, originalStores, originalProducts, originalStoresOnly, isCreatingNew, selectedChatbox?.id, normalizeProductSelection])
+    setHasIntegrationChanges(storesChanged || productsChanged)
+  }, [selectedStores, selectedProducts, originalStores, originalProducts, isCreatingNew, selectedChatbox?.id, normalizeProductSelection])
 
   // Ürün ID'lerini memoize et (dependency için)
   const productIds = useMemo(() => backendProducts.map(p => p.id).join(','), [backendProducts])
@@ -787,34 +738,32 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
     setIsSavingIntegrations(true)
     try {
-      // Store integrations hazırla
+      // Store integrations hazırla - Sadece mağaza ana sayfasında göster
       const storeIntegrations = selectedStores
         .filter(id => id !== 'all')
         .map(storeId => ({
           store_id: storeId,
           show_on_homepage: true,
-          show_on_products: !storesOnly.has(storeId), // Sadece mağaza işaretliyse ürünlerde gösterme
+          show_on_products: false, // Mağaza seçimi = sadece mağaza ana sayfasında
           position: 'bottom-right',
           is_active: true
         }))
 
-      // Product integrations hazırla
+      // Product integrations hazırla - SADECE ürün detay sayfasında göster
       const productIntegrations = selectedProducts
         .filter(id => id !== 'all')
         .map(productId => ({
           product_id: productId,
           show_on_product_page: true,
+          show_on_store_homepage: false, // Ürün seçimi = SADECE ürün detay sayfasında
           is_active: true
         }))
-
-      // Stores only listesini hazırla (Set'i Array'e çevir)
-      const storesOnlyList = Array.from(storesOnly)
 
       // Backend'e gönder
       const result = await updateChatboxIntegrations(selectedChatbox.id, {
         stores: storeIntegrations,
         products: productIntegrations,
-        stores_only: storesOnlyList
+        stores_only: [] // Artık kullanılmıyor
       })
 
       // Başarılı olursa orijinal değerleri güncelle (normalize edilmiş haliyle)
@@ -822,7 +771,6 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
       // Ürün seçimlerini normalize et: "Tüm Ürünler" ile tek tek tüm ürünleri seçmek aynı kabul edilir
       const normalizedProducts = normalizeProductSelection(selectedProducts)
       setOriginalProducts(normalizedProducts)
-      setOriginalStoresOnly(new Set(storesOnly))
       setHasIntegrationChanges(false)
 
       alert(`Entegrasyonlar başarıyla kaydedildi!\n${result.stores_added} mağaza, ${result.products_added} ürün eklendi.`)
@@ -838,7 +786,6 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   const handleCancelIntegrations = () => {
     setSelectedStores([...originalStores])
     setSelectedProducts([...originalProducts])
-    setStoresOnly(new Set(originalStoresOnly))
     setHasIntegrationChanges(false)
   }
 
@@ -1167,6 +1114,12 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
   // Mağaza seçimi fonksiyonları
   const handleStoreSelection = (storeId) => {
+    // Çakışma kontrolü (sadece seçilmeye çalışıldığında)
+    if (storeId !== 'all' && !selectedStores.includes(storeId) && conflictingStores[storeId]) {
+      alert(`Bu mağaza "${conflictingStores[storeId]}" isimli chatbox'ta zaten seçili.\n\nBir mağaza aynı anda sadece bir chatbox'ta seçilebilir.`)
+      return
+    }
+
     if (storeId === 'all') {
       // Tüm mağazalar seçildi
       if (selectedStores.includes('all')) {
@@ -1213,16 +1166,11 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
       return 'Tüm Mağazalar'
     }
     if (selectedStores.length === 1) {
-      const store = storeList.find(store => store.id === selectedStores[0])
+      const store = backendStores.find(store => store.id === selectedStores[0])
       return store ? store.name : 'Mağaza seçin'
     }
     return `${selectedStores.length} mağaza seçildi`
   }
-
-  // Seçilen mağazalar değiştiğinde ürün seçimini resetle
-  useEffect(() => {
-    setSelectedProducts([])
-  }, [selectedStores])
 
   // Seçilen mağazalara göre mevcut ürünleri getir (backend'den)
   const getAvailableProducts = () => {
@@ -1232,6 +1180,12 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
   // Ürün seçimi fonksiyonları
   const handleProductSelection = (productId) => {
+    // Çakışma kontrolü (sadece seçilmeye çalışıldığında)
+    if (productId !== 'all' && !selectedProducts.includes(productId) && conflictingProducts[productId]) {
+      alert(`Bu ürün "${conflictingProducts[productId]}" isimli chatbox'ta zaten seçili.\n\nBir ürün aynı anda sadece bir chatbox'ta seçilebilir.`)
+      return
+    }
+
     if (productId === 'all') {
       const availableProducts = getAvailableProducts()
       if (selectedProducts.includes('all')) {
@@ -1272,10 +1226,6 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   }
 
   const getProductSelectionText = () => {
-    if (selectedStores.length === 0) {
-      return 'Önce mağaza seçin'
-    }
-
     const availableProducts = getAvailableProducts()
     if (availableProducts.length === 0) {
       return 'Ürün bulunamadı'
@@ -1769,8 +1719,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
   if (activeTab === 'Entegrasyonlar') {
     return (
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 mx-2 sm:mx-4 lg:mx-12 xl:mx-20 mt-4 lg:mt-8">
-        <div className="bg-white border-2 rounded-2xl flex flex-col transition-all duration-700 ease-out translate-y-0 scale-100 w-full lg:w-1/2" style={{ borderColor: '#E5E7EB', animationDelay: '150ms' }}>
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 mx-2 sm:mx-4 lg:mx-12 xl:mx-20 mt-4 lg:mt-8 items-start">
+        <div className="bg-white border-2 rounded-2xl flex flex-col transition-all duration-700 ease-out translate-y-0 scale-100 w-full lg:w-1/2 self-start" style={{ borderColor: '#E5E7EB', animationDelay: '150ms' }}>
           <div className="flex items-center p-4 sm:p-6 lg:p-8 border-b border-gray-200">
             <h3 className="text-xl sm:text-2xl lg:text-3xl">
               <span 
@@ -1791,7 +1741,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
               </span>
             </h3>
           </div>
-          <div className="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col">
+          <div className="p-4 sm:p-6 lg:p-8 flex flex-col">
             <div 
               className="rounded-lg p-3 sm:p-4 font-mono text-xs sm:text-sm leading-relaxed relative overflow-hidden overflow-x-auto"
               style={{ backgroundColor: '#1E1E1E' }}
@@ -1982,10 +1932,46 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                 </svg>
                               </div>
-                              <div>
+                              <div className="flex-1">
                                 <p className="text-sm font-medium text-gray-900">{store.name}</p>
-                                <p className="text-xs text-gray-500">{store.platform} • {store.status === 'active' ? 'Aktif' : 'Pasif'}</p>
+                                <p className="text-xs text-gray-500">
+                                  {store.description
+                                    ? store.description.length > 30
+                                      ? store.description.substring(0, 30) + '...'
+                                      : store.description
+                                    : 'Açıklama yok'}
+                                </p>
                               </div>
+                              {/* Hangi chatbox'ta entegre olduğunu göster */}
+                              {(() => {
+                                const integratedChatbox = Object.entries(allIntegrations).find(([chatboxId, data]) =>
+                                  data.stores.includes(store.id) || data.stores_only?.includes(store.id)
+                                )
+
+                                if (!integratedChatbox || integratedChatbox[0] === selectedChatbox?.id) {
+                                  return null
+                                }
+
+                                // chatboxList'ten o chatbox'ın renklerini bul
+                                const chatbox = chatboxList?.find(cb => cb.id === integratedChatbox[0])
+                                const bgColor = chatbox?.button_primary_color || chatbox?.primary_color || '#3B82F6'
+                                const borderColor = chatbox?.button_border_color || chatbox?.primary_color || '#3B82F6'
+                                const textColor = chatbox?.button_icon_color || '#FFFFFF'
+
+                                return (
+                                  <div
+                                    className="flex items-center px-3 py-1.5 rounded-lg shadow-md border backdrop-blur-sm flex-shrink-0"
+                                    style={{
+                                      background: `linear-gradient(135deg, ${bgColor} 0%, ${borderColor} 100%)`,
+                                      borderColor: borderColor
+                                    }}
+                                  >
+                                    <span className="text-xs font-semibold truncate max-w-[100px]" style={{ color: textColor }}>
+                                      {integratedChatbox[1].chatbox_name}
+                                    </span>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </div>
                         ))
@@ -1999,7 +1985,22 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                 </div>
 
                 {/* Seçilen Mağazalar Özeti */}
-                {selectedStores.length > 0 && (
+                {isLoadingIntegrations ? (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                    <p className="text-xs text-gray-600 mb-2">Entegrasyonlar yükleniyor...</p>
+                    <div className="space-y-2">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="flex items-center p-2 bg-white rounded-lg border border-gray-200 animate-pulse">
+                          <div className="w-8 h-8 rounded-full mr-3 bg-gray-200"></div>
+                          <div className="flex-1">
+                            <div className="h-4 bg-gray-200 rounded w-3/4 mb-1"></div>
+                            <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : selectedStores.length > 0 && (
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-600 mb-2">Seçilen mağazalar:</p>
                     <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
@@ -2045,35 +2046,55 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                               {/* İsim ve Bilgiler */}
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{store.name}</p>
-                                <p className="text-xs text-gray-500">{store.platform} • {store.status === 'active' ? 'Aktif' : 'Pasif'}</p>
+                                <p className="text-xs text-gray-500">
+                                  {store.description
+                                    ? store.description.length > 30
+                                      ? store.description.substring(0, 30) + '...'
+                                      : store.description
+                                    : 'Açıklama yok'}
+                                </p>
                               </div>
-                              {/* Sadece Mağaza Toggle */}
-                              <div className="ml-2 flex-shrink-0">
-                                <label className="flex items-center cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={storesOnly.has(store.id)}
-                                    onChange={(e) => {
-                                      const newStoresOnly = new Set(storesOnly)
-                                      if (e.target.checked) {
-                                        newStoresOnly.add(store.id)
-                                      } else {
-                                        newStoresOnly.delete(store.id)
-                                      }
-                                      setStoresOnly(newStoresOnly)
-                                    }}
-                                    className="sr-only"
-                                  />
-                                  <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                    storesOnly.has(store.id) ? 'bg-[#FF6925]' : 'bg-gray-300'
-                                  }`}>
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                      storesOnly.has(store.id) ? 'translate-x-6' : 'translate-x-1'
-                                    }`} />
+                              {/* Chatbox Badge */}
+                              {(() => {
+                                if (!selectedChatbox) {
+                                  console.log('❌ selectedChatbox yok!')
+                                  return null
+                                }
+
+                                // Fallback: Eğer button renkleri yoksa primary_color kullan
+                                const bgColor = selectedChatbox.button_primary_color || selectedChatbox.primary_color || '#3B82F6'
+                                const borderColor = selectedChatbox.button_border_color || selectedChatbox.primary_color || '#3B82F6'
+                                const iconColor = selectedChatbox.button_icon_color || '#FFFFFF'
+
+                                console.log('🎨 Chatbox Badge Debug:', {
+                                  chatboxName: selectedChatbox.name,
+                                  button_primary_color: selectedChatbox.button_primary_color,
+                                  button_border_color: selectedChatbox.button_border_color,
+                                  button_icon_color: selectedChatbox.button_icon_color,
+                                  fallback_bgColor: bgColor,
+                                  fallback_borderColor: borderColor,
+                                  fallback_iconColor: iconColor
+                                })
+
+                                return (
+                                  <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                                    <div
+                                      className="flex items-center px-3 py-1.5 rounded-lg shadow-md border backdrop-blur-sm"
+                                      style={{
+                                        background: `linear-gradient(135deg, ${bgColor} 0%, ${borderColor} 100%)`,
+                                        borderColor: borderColor
+                                      }}
+                                    >
+                                    <span
+                                      className="text-xs font-semibold truncate max-w-[100px]"
+                                      style={{ color: iconColor }}
+                                    >
+                                      {selectedChatbox.name}
+                                    </span>
                                   </div>
-                                  <span className="ml-2 text-xs text-gray-600 whitespace-nowrap">Sadece Mağaza</span>
-                                </label>
-                              </div>
+                                </div>
+                                )
+                              })()}
                             </div>
                           ) : null
                         })}
@@ -2082,127 +2103,172 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                 )}
               </div>
 
-              {/* Ürün Seçimi - Sadece mağaza seçildiyse göster */}
-              {selectedStores.length > 0 && (
-                <div>
-                  <h4 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">Ürün Seçimi</h4>
-                  <div className="relative" ref={productDropdownRef}>
-                    <button
-                      onClick={() => setIsProductDropdownOpen(!isProductDropdownOpen)}
-                      className={`w-full p-3 sm:p-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#FF6925] focus:ring-1 focus:ring-[#FF6925] transition-colors bg-white hover:bg-gray-50 text-left flex items-center justify-between ${
-                        selectedStores.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+              {/* Ürün Seçimi */}
+              <div>
+                <h4 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">Ürün Seçimi</h4>
+                <div className="relative" ref={productDropdownRef}>
+                  <button
+                    onClick={() => setIsProductDropdownOpen(!isProductDropdownOpen)}
+                    className="w-full p-3 sm:p-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#FF6925] focus:ring-1 focus:ring-[#FF6925] transition-colors bg-white hover:bg-gray-50 text-left flex items-center justify-between"
+                  >
+                    <span className="text-sm sm:text-base text-gray-700">
+                      {getProductSelectionText()}
+                    </span>
+                    <svg
+                      className={`w-4 h-4 text-gray-500 transform transition-transform duration-200 ${
+                        isProductDropdownOpen ? 'rotate-180' : ''
                       }`}
-                      disabled={selectedStores.length === 0}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                      <span className="text-sm sm:text-base text-gray-700">
-                        {getProductSelectionText()}
-                      </span>
-                      <svg
-                        className={`w-4 h-4 text-gray-500 transform transition-transform duration-200 ${
-                          isProductDropdownOpen ? 'rotate-180' : ''
-                        }`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                      </svg>
-                    </button>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </button>
 
-                    {/* Ürün Dropdown Menü */}
-                    {isProductDropdownOpen && (
-                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {isLoadingProducts ? (
-                          <div className="flex items-center justify-center p-8">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-                          </div>
-                        ) : getAvailableProducts().length > 0 ? (
-                          <>
-                            {/* Tüm Ürünler Seçeneği */}
-                            <div
-                              onClick={() => handleProductSelection('all')}
-                              className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
-                            >
-                              <div className="flex items-center justify-center w-4 h-4 mr-3">
-                                {selectedProducts.includes('all') && (
-                                  <svg className="w-4 h-4 text-[#FF6925]" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                  </svg>
-                                )}
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">Tüm Ürünler</p>
-                                <p className="text-xs text-gray-500">Seçilen mağazaların tüm ürünlerini entegre edin ({getAvailableProducts().length} ürün)</p>
-                              </div>
+                  {/* Ürün Dropdown Menü */}
+                  {isProductDropdownOpen && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {isLoadingProducts ? (
+                        <div className="flex items-center justify-center p-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                        </div>
+                      ) : getAvailableProducts().length > 0 ? (
+                        <>
+                          {/* Tüm Ürünler Seçeneği */}
+                          <div
+                            onClick={() => handleProductSelection('all')}
+                            className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                          >
+                            <div className="flex items-center justify-center w-4 h-4 mr-3">
+                              {selectedProducts.includes('all') && (
+                                <svg className="w-4 h-4 text-[#FF6925]" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
                             </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">Tüm Ürünler</p>
+                              <p className="text-xs text-gray-500">Tüm ürünleri entegre edin ({getAvailableProducts().length} ürün)</p>
+                            </div>
+                          </div>
 
-                            {/* Tekil Ürün Seçenekleri */}
-                            {getAvailableProducts().map((product) => {
-                              // Backend'den gelen ürün için store bilgisini bul
-                              const store = backendStores?.find(s => s.id === product.store_id)
+                          {/* Tekil Ürün Seçenekleri */}
+                          {getAvailableProducts().map((product) => {
+                            // Backend'den gelen ürün için store bilgisini bul
+                            const store = backendStores?.find(s => s.id === product.store_id)
 
-                              return (
+                            return (
+                              <div
+                                key={product.id}
+                                onClick={() => handleProductSelection(product.id)}
+                                className="flex items-center p-3 hover:bg-gray-50 cursor-pointer"
+                              >
+                                <div className="flex items-center justify-center w-4 h-4 mr-3">
+                                  {selectedProducts.includes(product.id) && (
+                                    <svg className="w-4 h-4 text-[#FF6925]" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </div>
+                                {/* Ürün görseli */}
+                                {productImages[product.id] ? (
+                                  <img
+                                    src={productImages[product.id]}
+                                    alt={product.name}
+                                    className="w-10 h-10 rounded-lg mr-3 object-cover border border-gray-200"
+                                    onError={(e) => {
+                                      // Görsel yüklenemezse placeholder göster
+                                      e.currentTarget.style.display = 'none'
+                                      const placeholder = e.currentTarget.nextElementSibling as HTMLElement
+                                      if (placeholder) placeholder.style.display = 'flex'
+                                    }}
+                                  />
+                                ) : null}
                                 <div
-                                  key={product.id}
-                                  onClick={() => handleProductSelection(product.id)}
-                                  className="flex items-center p-3 hover:bg-gray-50 cursor-pointer"
+                                  className={`w-10 h-10 rounded-lg mr-3 bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0 ${productImages[product.id] ? 'hidden' : ''}`}
                                 >
-                                  <div className="flex items-center justify-center w-4 h-4 mr-3">
-                                    {selectedProducts.includes(product.id) && (
-                                      <svg className="w-4 h-4 text-[#FF6925]" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                      </svg>
-                                    )}
+                                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                  </svg>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
+                                    <p className="text-xs text-gray-500">{product.category} • {product.price} TL</p>
                                   </div>
-                                  <div className="flex items-center flex-1">
-                                    {/* Ürün görseli */}
-                                    {productImages[product.id] ? (
-                                      <img
-                                        src={productImages[product.id]}
-                                        alt={product.name}
-                                        className="w-10 h-10 rounded-lg mr-3 object-cover border border-gray-200"
-                                        onError={(e) => {
-                                          // Görsel yüklenemezse placeholder göster
-                                          e.currentTarget.style.display = 'none'
-                                          const placeholder = e.currentTarget.nextElementSibling as HTMLElement
-                                          if (placeholder) placeholder.style.display = 'flex'
-                                        }}
-                                      />
-                                    ) : null}
-                                    <div 
-                                      className={`w-10 h-10 rounded-lg mr-3 bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0 ${productImages[product.id] ? 'hidden' : ''}`}
+                                  {store && (
+                                    <span
+                                      className="text-xs px-2 py-0.5 rounded-full font-medium bg-gradient-to-r bg-clip-text text-transparent flex-shrink-0 text-left -ml-2"
+                                      style={{
+                                        backgroundImage: 'linear-gradient(135deg, rgb(255, 105, 37), rgb(255, 191, 49))'
+                                      }}
                                     >
-                                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                                      </svg>
-                                    </div>
-                                    <div className="flex-1">
-                                      <p className="text-sm font-medium text-gray-900">{product.name}</p>
-                                      <div className="flex items-center justify-between">
-                                        <p className="text-xs text-gray-500">{product.category} • {product.price}</p>
-                                        {store && (
-                                          <span className="text-xs text-[#FFBF31] bg-[#FFF9E6] px-2 py-0.5 rounded-full">
-                                            {store.name}
-                                          </span>
-                                        )}
+                                      Mağaza: {store.name}
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Hangi chatbox'ta entegre olduğunu göster */}
+                                {(() => {
+                                  const integratedChatbox = Object.entries(allIntegrations).find(([chatboxId, data]) =>
+                                    data.products.includes(product.id)
+                                  )
+
+                                  if (!integratedChatbox || integratedChatbox[0] === selectedChatbox?.id) {
+                                    return null
+                                  }
+
+                                  // chatboxList'ten o chatbox'ın renklerini bul
+                                  const chatbox = chatboxList?.find(cb => cb.id === integratedChatbox[0])
+                                  const bgColor = chatbox?.button_primary_color || chatbox?.primary_color || '#3B82F6'
+                                  const borderColor = chatbox?.button_border_color || chatbox?.primary_color || '#3B82F6'
+                                  const textColor = chatbox?.button_icon_color || '#FFFFFF'
+
+                                  return (
+                                    <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                                      <div
+                                        className="flex items-center px-3 py-1.5 rounded-lg shadow-md border backdrop-blur-sm"
+                                        style={{
+                                          background: `linear-gradient(135deg, ${bgColor} 0%, ${borderColor} 100%)`,
+                                          borderColor: borderColor
+                                        }}
+                                      >
+                                        <span className="text-xs font-semibold truncate max-w-[100px]" style={{ color: textColor }}>
+                                          {integratedChatbox[1].chatbox_name}
+                                        </span>
                                       </div>
                                     </div>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </>
-                        ) : (
-                          <div className="p-4 text-center text-sm text-gray-500">
-                            Ürün bulunamadı
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                                  )
+                                })()}
+                              </div>
+                            )
+                          })}
+                        </>
+                      ) : (
+                        <div className="p-4 text-center text-sm text-gray-500">
+                          Ürün bulunamadı
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Seçilen Ürünler Özeti */}
-                  {selectedProducts.length > 0 && (
+                  {isLoadingIntegrations ? (
+                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-gray-600 mb-2">Entegrasyonlar yükleniyor...</p>
+                      <div className="space-y-2">
+                        {[1, 2].map((i) => (
+                          <div key={i} className="flex items-center p-2 bg-white rounded-lg border border-gray-200 animate-pulse">
+                            <div className="w-8 h-8 rounded-lg mr-3 bg-gray-200"></div>
+                            <div className="flex-1">
+                              <div className="h-4 bg-gray-200 rounded w-3/4 mb-1"></div>
+                              <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : selectedProducts.length > 0 && (
                     <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                       <p className="text-xs text-gray-600 mb-2">Seçilen ürünler:</p>
                       <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
@@ -2248,16 +2314,63 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                                 </div>
                                 {/* İsim ve Bilgiler */}
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
+                                  <div className="flex items-center gap-2 mb-0.5">
                                     <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
-                                    {store && (
-                                      <span className="text-xs text-[#FFBF31] bg-[#FFF9E6] px-2 py-0.5 rounded-full flex-shrink-0">
-                                        {store.name}
-                                      </span>
-                                    )}
+                                    <p className="text-xs text-gray-500">{product.category} • {product.price} TL</p>
                                   </div>
-                                  <p className="text-xs text-gray-500">{product.category} • {product.price}</p>
+                                  {store && (
+                                    <span
+                                      className="text-xs px-2 py-0.5 rounded-full font-medium bg-gradient-to-r bg-clip-text text-transparent flex-shrink-0 text-left -ml-2"
+                                      style={{
+                                        backgroundImage: 'linear-gradient(135deg, rgb(255, 105, 37), rgb(255, 191, 49))'
+                                      }}
+                                    >
+                                      Mağaza: {store.name}
+                                    </span>
+                                  )}
                                 </div>
+                                {/* Chatbox Badge */}
+                                {(() => {
+                                  if (!selectedChatbox) {
+                                    console.log('❌ Product: selectedChatbox yok!')
+                                    return null
+                                  }
+
+                                  // Fallback: Eğer button renkleri yoksa primary_color kullan
+                                  const bgColor = selectedChatbox.button_primary_color || selectedChatbox.primary_color || '#3B82F6'
+                                  const borderColor = selectedChatbox.button_border_color || selectedChatbox.primary_color || '#3B82F6'
+                                  const iconColor = selectedChatbox.button_icon_color || '#FFFFFF'
+
+                                  console.log('🎨 Product Chatbox Badge Debug:', {
+                                    productName: product.name,
+                                    chatboxName: selectedChatbox.name,
+                                    button_primary_color: selectedChatbox.button_primary_color,
+                                    button_border_color: selectedChatbox.button_border_color,
+                                    button_icon_color: selectedChatbox.button_icon_color,
+                                    fallback_bgColor: bgColor,
+                                    fallback_borderColor: borderColor,
+                                    fallback_iconColor: iconColor
+                                  })
+
+                                  return (
+                                    <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                                      <div
+                                        className="flex items-center px-3 py-1.5 rounded-lg shadow-md border backdrop-blur-sm"
+                                        style={{
+                                          background: `linear-gradient(135deg, ${bgColor} 0%, ${borderColor} 100%)`,
+                                          borderColor: borderColor
+                                        }}
+                                      >
+                                      <span
+                                        className="text-xs font-semibold truncate max-w-[100px]"
+                                        style={{ color: iconColor }}
+                                      >
+                                        {selectedChatbox.name}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  )
+                                })()}
                               </div>
                             ) : null
                           })}
@@ -2265,7 +2378,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                     </div>
                   )}
                 </div>
-              )}
+              </div>
 
             </div>
           </div>

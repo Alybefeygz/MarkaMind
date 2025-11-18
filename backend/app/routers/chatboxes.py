@@ -1934,6 +1934,79 @@ async def get_chatbox_stats(
 # CHATBOX INTEGRATIONS (STORES & PRODUCTS)
 # ============================================================================
 
+@router.get("/integrations/all")
+async def get_all_chatbox_integrations(
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Get all chatbox integrations for the current user
+    Returns: {
+        "chatbox_id": {
+            "chatbox_name": str,
+            "stores": [store_id],
+            "products": [product_id],
+            "stores_only": [store_id]  # Sadece mağaza olarak işaretlenenler
+        }
+    }
+    """
+    try:
+        # Get all user's chatboxes
+        chatboxes_result = supabase.table("chatbots")\
+            .select("id, name")\
+            .eq("user_id", current_user["id"])\
+            .execute()
+
+        integrations = {}
+
+        for chatbox in chatboxes_result.data:
+            chatbox_id = chatbox["id"]
+
+            # Get store integrations
+            stores_result = supabase.table("chatbox_stores")\
+                .select("store_id, show_on_products")\
+                .eq("chatbox_id", chatbox_id)\
+                .eq("is_active", True)\
+                .execute()
+
+            # Get product integrations (with store_id to check stores_only)
+            products_result = supabase.table("chatbox_products")\
+                .select("product_id, products!inner(store_id)")\
+                .eq("chatbox_id", chatbox_id)\
+                .eq("is_active", True)\
+                .execute()
+
+            stores = [rel["store_id"] for rel in stores_result.data]
+            stores_only = [rel["store_id"] for rel in stores_result.data if not rel["show_on_products"]]
+
+            # Sadece çakışma yaratan ürünleri ekle
+            # Eğer ürünün mağazası "stores_only" ise, o ürün çakışma yaratmaz
+            products_to_conflict = []
+            for rel in products_result.data:
+                product_id = rel["product_id"]
+                # Ürünün mağaza ID'sini al
+                store_id = rel["products"]["store_id"] if rel.get("products") else None
+
+                # Eğer bu ürünün mağazası "stores_only" DEĞİLSE, çakışma yarat
+                if store_id and store_id not in stores_only:
+                    products_to_conflict.append(product_id)
+
+            integrations[chatbox_id] = {
+                "chatbox_name": chatbox["name"],
+                "stores": stores,
+                "products": products_to_conflict,  # Sadece çakışma yaratan ürünler
+                "stores_only": stores_only
+            }
+
+        return integrations
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get integrations: {str(e)}"
+        )
+
+
 @router.put("/{chatbox_id}/integrations", response_model=ChatboxIntegrationsResponse)
 async def update_chatbox_integrations(
     chatbox_id: UUID,
@@ -1994,19 +2067,15 @@ async def update_chatbox_integrations(
         
         # 3. Create new store integrations
         stores_added = 0
-        stores_only_ids = set(str(sid) for sid in integrations.stores_only)
-        
+
         if integrations.stores:
             store_records = []
             for store_integration in integrations.stores:
-                # Check if this store is marked as "stores only"
-                is_store_only = str(store_integration.store_id) in stores_only_ids
-                
                 store_records.append({
                     "chatbox_id": str(chatbox_id),
                     "store_id": str(store_integration.store_id),
-                    "show_on_homepage": not is_store_only and store_integration.show_on_homepage,
-                    "show_on_products": not is_store_only and store_integration.show_on_products,
+                    "show_on_homepage": True,  # Mağaza her zaman ana sayfada gösterilir
+                    "show_on_products": False,  # Mağaza seçimi ürün sayfalarında gösterilmez (sadece ürün seçimi yapılırsa gösterilir)
                     "position": store_integration.position,
                     "is_active": store_integration.is_active
                 })
@@ -2025,7 +2094,8 @@ async def update_chatbox_integrations(
                 product_records.append({
                     "chatbox_id": str(chatbox_id),
                     "product_id": str(product_integration.product_id),
-                    "show_on_product_page": product_integration.show_on_product_page,
+                    "show_on_product_page": product_integration.show_on_product_page,  # Frontend'den gelen değer
+                    "show_on_store_homepage": product_integration.show_on_store_homepage,  # Frontend'den gelen değer (yeni sistemde False)
                     "is_active": product_integration.is_active
                 })
             
@@ -2034,7 +2104,14 @@ async def update_chatbox_integrations(
                     .insert(product_records)\
                     .execute()
                 products_added = len(result.data) if result.data else 0
-        
+
+        # 5. Automatically activate chatbox when integrations are added
+        if stores_added > 0 or products_added > 0:
+            supabase.table("chatbots")\
+                .update({"status": "active"})\
+                .eq("id", str(chatbox_id))\
+                .execute()
+
         return ChatboxIntegrationsResponse(
             stores_added=stores_added,
             products_added=products_added,

@@ -748,3 +748,37 @@ export default {
   deleteBrand,
   uploadBrandLogo,
 }
+
+/**
+ * Get chatbox configuration for a specific store (public endpoint)
+ * Used in virtual store pages to display the integrated chatbox
+ */
+export async function getChatboxByStore(storeId: string): Promise<ChatboxResponse> {
+  return apiFetch<ChatboxResponse>(`/stores/${storeId}/chatbox`)
+}
+
+/**
+ * Get chatbox configuration for a specific product (public endpoint)
+ * Used in product pages to display the integrated chatbox
+ */
+export async function getChatboxByProduct(productId: string): Promise<ChatboxResponse> {
+  return apiFetch<ChatboxResponse>(`/products/${productId}/chatbox`)
+}
+
+/**
+ * Get all chatbox integrations for the current user
+ * Used to check for conflicts when selecting stores/products
+ */
+export async function getAllChatboxIntegrations(): Promise<Record<string, {
+  chatbox_name: string
+  stores: string[]
+  products: string[]
+  stores_only: string[]
+}>> {
+  return apiFetch<Record<string, {
+    chatbox_name: string
+    stores: string[]
+    products: string[]
+    stores_only: string[]
+  }>>('/chatboxes/integrations/all')
+}

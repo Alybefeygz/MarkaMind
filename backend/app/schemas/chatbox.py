@@ -28,7 +28,7 @@ class ChatboxBase(BaseModel):
     avatar_url: Optional[str] = Field(None, description="Avatar URL (opsiyonel)")
     animation_style: str = Field("fade", pattern=r'^(fade|slide|bounce|none)$', description="Animasyon stili (opsiyonel)")
     language: str = Field("tr", pattern=r'^(tr|en|de|fr|es)$', description="Dil (opsiyonel)")
-    status: str = Field("draft", pattern=r'^(draft|active|inactive)$', description="Durum (opsiyonel)")
+    status: str = Field("active", pattern=r'^(draft|active|inactive)$', description="Durum (opsiyonel - varsayılan: active)")
 
 
 class ChatboxCreate(ChatboxBase):
@@ -78,6 +78,12 @@ class ChatboxList(BaseModel):
     product_count: int = 0
     conversation_count: int = 0
     knowledge_source_count: int = 0
+
+    # Buton Renkleri (badge'ler için gerekli)
+    button_primary_color: str
+    button_border_color: str
+    button_icon_color: str
+    primary_color: str  # Fallback için
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -139,6 +145,12 @@ class ChatboxResponse(BaseModel):
     conversation_count: int = 0
     knowledge_source_count: int = 0
 
+    # Integration ayarları (store/product chatbox endpoint'leri için)
+    show_on_homepage: Optional[bool] = None
+    show_on_products: Optional[bool] = None
+    show_on_product_page: Optional[bool] = None
+    position: Optional[str] = None
+
     # Tarihler
     created_at: datetime
     updated_at: datetime
@@ -180,12 +192,14 @@ class ChatboxProductRelationCreate(BaseModel):
     """Create chatbox-product relation"""
     product_id: UUID
     show_on_product_page: bool = True
+    show_on_store_homepage: bool = True
     is_active: bool = True
 
 
 class ChatboxProductRelationUpdate(BaseModel):
     """Update chatbox-product relation"""
     show_on_product_page: Optional[bool] = None
+    show_on_store_homepage: Optional[bool] = None
     is_active: Optional[bool] = None
 
 
@@ -194,6 +208,7 @@ class ChatboxProductRelation(BaseModel):
     id: UUID
     product: ProductBasicInfo
     show_on_product_page: bool
+    show_on_store_homepage: bool = False  # Default value for backward compatibility
     is_active: bool
     created_at: datetime
 

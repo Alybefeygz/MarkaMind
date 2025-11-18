@@ -8,6 +8,7 @@ from ..schemas.product import (
     ProductImageResponse, ProductImageCreate, ProductImageUpdate,
     ProductReviewResponse, ProductReviewCreate, ProductReviewUpdate
 )
+from ..schemas.chatbox import ChatboxResponse
 from ..schemas.common import StatusResponse, PaginationParams, PaginationResponse
 from ..dependencies import get_current_user, get_supabase_client
 from ..services.product_image_service import product_image_service
@@ -891,4 +892,81 @@ async def delete_product_review(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete review: {str(e)}"
+        )
+
+
+@router.get("/{product_id}/chatbox", response_model=ChatboxResponse)
+async def get_product_chatbox(
+    product_id: UUID,
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Get active chatbox for a specific product (public endpoint for product pages)
+
+    Returns the chatbox configuration if:
+    - Product exists and is active
+    - Chatbox is integrated with the product
+    - Chatbox status is 'active'
+    - Integration is active (is_active = true)
+    - show_on_product_page is true
+    """
+    try:
+        # Get chatbox integrated with this product
+        result = supabase.table("chatbox_products").select(
+            "chatbox_id, show_on_product_page, is_active, chatbots!chatbox_id(*)"
+        ).eq("product_id", str(product_id)).eq(
+            "is_active", True
+        ).eq("show_on_product_page", True).execute()
+
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active chatbox found for this product"
+            )
+
+        relation = result.data[0]
+        chatbox_data = relation.get('chatbots')
+
+        if not chatbox_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chatbox not found"
+            )
+
+        # Check if chatbox is active
+        if chatbox_data.get('status') != 'active':
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chatbox is not active"
+            )
+
+        # Get position from store integration (if exists)
+        # Product integrations don't have position, use default or get from store
+        store_position = "bottom-right"  # Default position
+        if chatbox_data.get('store_id'):
+            store_relation = supabase.table("chatbox_stores").select("position").eq(
+                "chatbox_id", chatbox_data['id']
+            ).eq("store_id", chatbox_data['store_id']).execute()
+
+            if store_relation.data and len(store_relation.data) > 0:
+                store_position = store_relation.data[0].get('position', 'bottom-right')
+
+        # Add integration settings to response
+        chatbox_data['show_on_product_page'] = relation['show_on_product_page']
+        chatbox_data['position'] = store_position
+
+        # Add counts (for compatibility with ChatboxResponse schema)
+        chatbox_data['store_count'] = 0
+        chatbox_data['product_count'] = 0
+        chatbox_data['conversation_count'] = 0
+        chatbox_data['knowledge_source_count'] = 0
+
+        return ChatboxResponse(**chatbox_data)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get product chatbox: {str(e)}"
         )
