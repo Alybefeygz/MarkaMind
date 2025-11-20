@@ -13,7 +13,7 @@ import { DEFAULT_THEME } from '@/lib/theme'
 import { createChatbox, getUserChatboxes, type ChatboxCreate, type ChatboxResponse } from '@/lib/api'
 
 // Kullanıcının mağaza verileri - Backend'den yüklenecek (mock veriler kaldırıldı)
-const initialStoreList = []
+const initialStoreList: unknown[] = []
 
 export default function Home() {
   const router = useRouter()
@@ -181,7 +181,7 @@ export default function Home() {
     { label: 'Profil', title: { bold: '', normal: 'Profil' } },
   ]
 
-  const handlePageChange = (pageIndex) => {
+  const handlePageChange = (pageIndex: number) => {
     // Başlığı güncelle
     setPageTitle(menuItems[pageIndex].title)
 
@@ -267,8 +267,8 @@ export default function Home() {
                 style={{
                   backgroundColor: `${themeColors.primary}10`
                 }}
-                onMouseEnter={(e) => e.target.style.backgroundColor = `${themeColors.primary}20`}
-                onMouseLeave={(e) => e.target.style.backgroundColor = `${themeColors.primary}10`}
+                onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = `${themeColors.primary}20`}
+                onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = `${themeColors.primary}10`}
               >
                 <Menu
                   className="w-4 sm:w-5 md:w-6 h-4 sm:h-5 md:h-6 group-hover:scale-110 transition-transform"
@@ -310,8 +310,8 @@ export default function Home() {
                   style={{
                     borderColor: isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'
                   }}
-                  onMouseEnter={(e) => e.target.style.borderColor = `${themeColors.primary}30`}
-                  onMouseLeave={(e) => e.target.style.borderColor = isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'}
+                  onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.borderColor = `${themeColors.primary}30`}
+                  onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.borderColor = isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'}
                 >
                   <div className="flex items-center space-x-1 sm:space-x-2 flex-1 min-w-0">
                     <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: chatboxList.find(cb => cb.id === selectedChatbox?.id)?.primary_color || themeColors.primary }} />
@@ -403,8 +403,8 @@ export default function Home() {
                   style={{
                     borderColor: isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'
                   }}
-                  onMouseEnter={(e) => e.target.style.borderColor = `${themeColors.primary}30`}
-                  onMouseLeave={(e) => e.target.style.borderColor = isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'}
+                  onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.borderColor = `${themeColors.primary}30`}
+                  onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.borderColor = isDropdownOpen ? `${themeColors.primary}30` : '#d1d5db'}
                 >
                   <div className="flex items-center space-x-1 sm:space-x-2 flex-1 min-w-0">
                     <MessageSquare className="w-3 sm:w-4 h-3 sm:h-4 flex-shrink-0" style={{ color: chatboxList.find(cb => cb.id === selectedChatbox?.id)?.primary_color || themeColors.primary }} />

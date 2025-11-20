@@ -170,7 +170,7 @@ export default function RegisterPage() {
                 Hesap Oluşturun
               </h1>
               <p className="text-sm text-[#666]">
-                MarkaMind'a katılın ve AI destekli chatbot'unuzu oluşturun
+                MarkaMind&apos;a katılın ve AI destekli chatbot&apos;unuzu oluşturun
               </p>
             </div>
 
@@ -205,7 +205,6 @@ export default function RegisterPage() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 text-gray-800 border-gray-200 focus:border-transparent bg-white placeholder-gray-400"
                   style={{
-                    focusRingColor: `${themeColors.primary}30`,
                     boxShadow: formData.full_name ? `0 0 0 2px ${themeColors.primary}30` : undefined
                   }}
                   placeholder="Adınızı ve soyadınızı girin"
@@ -227,7 +226,6 @@ export default function RegisterPage() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 text-gray-800 border-gray-200 focus:border-transparent bg-white placeholder-gray-400"
                   style={{
-                    focusRingColor: `${themeColors.primary}30`,
                     boxShadow: formData.username ? `0 0 0 2px ${usernameValidation.isValid ? '#10B981' : '#EF4444'}30` : undefined
                   }}
                   placeholder="Benzersiz kullanıcı adı seçin"
@@ -262,7 +260,6 @@ export default function RegisterPage() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 text-gray-800 border-gray-200 focus:border-transparent bg-white placeholder-gray-400"
                   style={{
-                    focusRingColor: `${themeColors.primary}30`,
                     boxShadow: formData.email ? `0 0 0 2px ${themeColors.primary}30` : undefined
                   }}
                   placeholder="ornek@email.com"
@@ -285,7 +282,6 @@ export default function RegisterPage() {
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 pr-12 text-gray-800 border-gray-200 focus:border-transparent bg-white placeholder-gray-400"
                     style={{
-                      focusRingColor: `${themeColors.primary}30`,
                       boxShadow: formData.password ? `0 0 0 2px ${themeColors.primary}30` : undefined
                     }}
                     placeholder="Güvenli bir şifre oluşturun"
@@ -346,7 +342,6 @@ export default function RegisterPage() {
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 pr-12 text-gray-800 border-gray-200 focus:border-transparent bg-white placeholder-gray-400"
                     style={{
-                      focusRingColor: `${themeColors.primary}30`,
                       boxShadow: formData.confirmPassword ? `0 0 0 2px ${passwordsMatch ? '#10B981' : '#EF4444'}30` : undefined
                     }}
                     placeholder="Şifrenizi tekrar girin"
@@ -455,7 +450,7 @@ export default function RegisterPage() {
             <Link href="/privacy" className="underline hover:text-[#1F1F1F] transition-colors">
               Gizlilik Politikası
             </Link>
-            'nı kabul etmiş olursunuz.
+            &apos;nı kabul etmiş olursunuz.
           </p>
         </div>
       </div>

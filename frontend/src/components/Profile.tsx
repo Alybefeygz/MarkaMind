@@ -821,9 +821,6 @@ export default function Profile({ themeColors }: ProfileProps) {
                 placeholder="Örn: Acme Corp"
                 disabled={isCreatingBrand}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 text-gray-900 disabled:opacity-50"
-                style={{
-                  focusRingColor: `${themeColors.primary}30`
-                }}
               />
             </div>
 
@@ -837,9 +834,6 @@ export default function Profile({ themeColors }: ProfileProps) {
                 rows={3}
                 disabled={isCreatingBrand}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 text-gray-900 resize-none disabled:opacity-50"
-                style={{
-                  focusRingColor: `${themeColors.primary}30`
-                }}
               />
             </div>
 
@@ -861,9 +855,6 @@ export default function Profile({ themeColors }: ProfileProps) {
                   placeholder="#3B82F6"
                   disabled={isCreatingBrand}
                   className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 text-gray-900 font-mono text-sm disabled:opacity-50"
-                  style={{
-                    focusRingColor: `${themeColors.primary}30`
-                  }}
                 />
               </div>
             </div>

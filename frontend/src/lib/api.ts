@@ -247,6 +247,7 @@ export interface Store {
   name: string
   platform: string
   logo?: string | null  // Backend'de 'logo' olarak geliyor
+  description?: string | null  // Mağaza açıklaması
   status: string
   primary_color: string
   secondary_color: string

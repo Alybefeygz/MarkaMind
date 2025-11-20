@@ -4,7 +4,8 @@ import { Store, MoreHorizontal, ArrowLeft, Star, Plus, X, Upload } from 'lucide-
 import { useState, useEffect, useRef } from 'react'
 import { SketchPicker } from 'react-color'
 import VirtualStoreChatboxAndButtons from './VirtualStoreChatboxAndButtons'
-import { createProduct, uploadProductImages, generateSlug, getProductReviews, getStoreProducts, getProductImages, getChatboxByStore, getChatboxByProduct, type ChatboxResponse } from '@/lib/api'
+import { createProduct, uploadProductImages, generateSlug, getProductReviews, getProductImages, getChatboxByStore, getChatboxByProduct, type ChatboxResponse } from '@/lib/api'
+import { useInventory } from '@/context/InventoryContext'
 
 // Mağaza verileri artık prop olarak geliyor
 
@@ -111,6 +112,9 @@ const reviewsList = {
 }
 
 export default function VirtualStore({ themeColors, storeList, setStoreList }) {
+  // Use Inventory Context
+  const { products: allProducts, fetchProducts } = useInventory()
+
   const [isVisible, setIsVisible] = useState(false)
   const [selectedStore, setSelectedStore] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -198,6 +202,12 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     }, 100)
     return () => clearTimeout(timer)
   }, [])
+
+  // Ürünleri Context'ten yükle (ilk mount'ta)
+  useEffect(() => {
+    fetchProducts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // ✅ Sadece ilk mount'ta çalış
 
   // Seçili mağaza için chatbox yükle
   useEffect(() => {
@@ -431,14 +441,16 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
     setTimeout(() => setIsVisible(true), 100)
   }
 
-  // Mağaza ürünlerini yükle
+  // Mağaza ürünlerini yükle (artık Context'ten filtrele - API çağrısı yok!)
   const loadStoreProducts = async (storeId) => {
     try {
-      console.log('🔄 Mağaza ürünleri yükleniyor:', storeId)
-      const response = await getStoreProducts(storeId, 1, 100)
+      console.log('🔄 Mağaza ürünleri yükleniyor (Context\'ten):', storeId)
+
+      // Context'ten ürünleri filtrele
+      const storeProducts = allProducts.filter(p => p.store_id === storeId)
 
       // Backend'den gelen ürünleri frontend formatına çevir
-      const formattedProducts = await Promise.all(response.items.map(async (product) => {
+      const formattedProducts = await Promise.all(storeProducts.map(async (product) => {
         // Ürün görsellerini çek
         let images = []
         try {
@@ -447,14 +459,6 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
         } catch (error) {
           console.warn('Ürün görselleri yüklenemedi:', product.id, error)
         }
-
-        // Debug: Backend'den gelen product data'sını logla
-        console.log('📦 Backend product data:', {
-          id: product.id,
-          name: product.name,
-          description: product.description,
-          review_count: product.review_count
-        })
 
         return {
           id: product.id,
@@ -475,7 +479,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
         [storeId]: formattedProducts
       }))
 
-      console.log('✅ Mağaza ürünleri yüklendi:', formattedProducts.length, 'ürün')
+      console.log('✅ Mağaza ürünleri yüklendi (Context cache):', formattedProducts.length, 'ürün')
     } catch (error) {
       console.error('❌ Mağaza ürünleri yüklenirken hata:', error)
       // Hata durumunda boş array set et
@@ -1370,7 +1374,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-[#666] mt-1">Profil'den oluşturduğunuz markalardan birini seçin</p>
+                <p className="text-xs text-[#666] mt-1">Profil&apos;den oluşturduğunuz markalardan birini seçin</p>
                 {brands.length === 0 && !isLoadingBrands && (
                   <p className="text-xs text-red-500 mt-1">Henüz mağaza oluşturmadınız. Önce Profil sayfasından mağaza ekleyin.</p>
                 )}

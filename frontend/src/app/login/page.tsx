@@ -124,7 +124,6 @@ export default function LoginPage() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 text-gray-800 border-gray-200 focus:border-transparent bg-white placeholder-gray-400"
                   style={{
-                    focusRingColor: `${themeColors.primary}30`,
                     boxShadow: formData.email ? `0 0 0 2px ${themeColors.primary}30` : undefined
                   }}
                   placeholder="ornek@email.com"
@@ -147,7 +146,6 @@ export default function LoginPage() {
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 pr-12 text-gray-800 border-gray-200 focus:border-transparent bg-white placeholder-gray-400"
                     style={{
-                      focusRingColor: `${themeColors.primary}30`,
                       boxShadow: formData.password ? `0 0 0 2px ${themeColors.primary}30` : undefined
                     }}
                     placeholder="Şifrenizi girin"
@@ -258,7 +256,7 @@ export default function LoginPage() {
             <Link href="/privacy" className="underline hover:text-[#1F1F1F] transition-colors">
               Gizlilik Politikası
             </Link>
-            'nı kabul etmiş olursunuz.
+            &apos;nı kabul etmiş olursunuz.
           </p>
         </div>
       </div>

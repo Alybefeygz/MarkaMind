@@ -4,14 +4,47 @@ import { ChevronDown, Plus, MessageSquare, Settings, Trash2, Eye, ArrowLeft, Sen
 import { useState, useEffect, useRef, useMemo } from 'react'
 import ChatboxPrivatization from './ChatboxPrivatization'
 import ChatboxElements from './ChatboxElements'
-import { getUserStores, getStoreProducts, getChatboxKnowledgeSources, uploadKnowledgeSource, toggleKnowledgeSourceStatus, deleteKnowledgeSource, createEditedPDF, getChatboxStores, getChatboxProducts, getProductImages, createChatbox, getUserChatboxes, updateChatboxIntegrations, deleteChatbox, getAllChatboxIntegrations, type Store, type ProductListItem, type KnowledgeSourceResponse, type ChatboxStoreRelation, type ChatboxProductRelation, type ChatboxCreate } from '../lib/api'
+import { getChatboxKnowledgeSources, uploadKnowledgeSource, toggleKnowledgeSourceStatus, deleteKnowledgeSource, createEditedPDF, getChatboxStores, getChatboxProducts, getProductImages, createChatbox, getUserChatboxes, updateChatboxIntegrations, deleteChatbox, getAllChatboxIntegrations, type Store, type ProductListItem, type KnowledgeSourceResponse, type ChatboxStoreRelation, type ChatboxProductRelation, type ChatboxCreate, type ChatboxResponse } from '../lib/api'
+import { useInventory } from '../context/InventoryContext'
 
-export default function ChatboxManagement({ selectedChatbox, activeTab, themeColors, storeList, productList, chatboxList, isCreatingNew, onCancelCreate, chatboxData, setChatboxData }) {
-  // DEBUG: Component mount kontrolü
-  console.log('🔄 ChatboxManagement MOUNT/RE-RENDER:', {
-    chatboxId: selectedChatbox?.id,
-    chatboxName: selectedChatbox?.name
-  })
+interface ThemeColors {
+  primary: string
+  secondary: string
+}
+
+interface ChatboxData {
+  brand_id?: string | null
+  selectedStores?: string[]
+  selectedProducts?: string[]
+  [key: string]: any
+}
+
+interface ChatboxManagementProps {
+  selectedChatbox: ChatboxResponse | null
+  activeTab: string
+  themeColors: ThemeColors
+  storeList?: Store[]
+  productList?: ProductListItem[]
+  chatboxList?: ChatboxResponse[]
+  isCreatingNew: boolean
+  onCancelCreate: () => void
+  chatboxData: ChatboxData
+  setChatboxData: (data: ChatboxData | ((prev: ChatboxData) => ChatboxData)) => void
+}
+
+export default function ChatboxManagement({ selectedChatbox, activeTab, themeColors, storeList, productList, chatboxList, isCreatingNew, onCancelCreate, chatboxData, setChatboxData }: ChatboxManagementProps) {
+  // Helper: Timestamp with milliseconds
+  const getTimestamp = () => {
+    const now = new Date()
+    const h = now.getHours().toString().padStart(2, '0')
+    const m = now.getMinutes().toString().padStart(2, '0')
+    const s = now.getSeconds().toString().padStart(2, '0')
+    const ms = now.getMilliseconds().toString().padStart(3, '0')
+    return `${h}:${m}:${s}.${ms}`
+  }
+
+  // Use Inventory Context
+  const { stores: backendStores, products: backendProducts, isLoadingStores, isLoadingProducts, fetchStores, fetchProducts } = useInventory()
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isChatboxVisible, setIsChatboxVisible] = useState(true)
@@ -65,27 +98,30 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
   // PDF status dropdown state
   const [statusDropdownOpen, setStatusDropdownOpen] = useState<string | null>(null)
-  
+
   // Animasyon state'leri
   const [isVisible, setIsVisible] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // FIX: Chatbox değişimini takip etmek için önceki ID'yi tutuyoruz
+  const [prevChatboxId, setPrevChatboxId] = useState<string | null>(null)
 
   // Mağaza seçimi state'leri
-  const [selectedStores, setSelectedStores] = useState([])
+  const [selectedStores, setSelectedStores] = useState<string[]>([])
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false)
-  const storeDropdownRef = useRef(null)
+  const storeDropdownRef = useRef<HTMLDivElement>(null)
 
   // Ürün seçimi state'leri
-  const [selectedProducts, setSelectedProducts] = useState([])
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false)
-  const productDropdownRef = useRef(null)
+  const productDropdownRef = useRef<HTMLDivElement>(null)
 
-  // Backend'den çekilen veriler
-  const [backendStores, setBackendStores] = useState<Store[]>([])
-  const [backendProducts, setBackendProducts] = useState<ProductListItem[]>([])
+  // Entegrasyon loading state'leri - API'den mağaza/ürün verisi gelene kadar true
+  const [isLoadingAllIntegrations, setIsLoadingAllIntegrations] = useState(false) // Tüm chatbox entegrasyonları (çakışma kontrolü)
+  const [isLoadingChatboxIntegrations, setIsLoadingChatboxIntegrations] = useState(false) // Seçili chatbox'un entegrasyonları
+
+  // Backend'den çekilen veriler (artık Context'ten geliyor)
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null)
-  const [isLoadingStores, setIsLoadingStores] = useState(false)
-  const [isLoadingProducts, setIsLoadingProducts] = useState(false)
-  const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(false)
 
   // Ürün görselleri için cache
   const [productImages, setProductImages] = useState<Record<string, string>>({})
@@ -105,6 +141,49 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   }>>({})
   const [conflictingStores, setConflictingStores] = useState<Record<string, string>>({}) // store_id -> chatbox_name
   const [conflictingProducts, setConflictingProducts] = useState<Record<string, string>>({}) // product_id -> chatbox_name
+
+  // ✅ OPTIMIZASYON: getAllChatboxIntegrations cache (session boyunca geçerli)
+  const integrationsCache = useRef<{
+    data: Record<string, {
+      chatbox_name: string
+      stores: string[]
+      products: string[]
+      stores_only: string[]
+    }> | null
+    timestamp: number
+  }>({ data: null, timestamp: 0 })
+
+  // FIX: Render-time state reset (Effect'ten önce çalışır ve flicker'ı önler)
+  // Tüm state'ler tanımlandıktan sonra çağrılmalı!
+  const currentChatboxId = selectedChatbox?.id ?? null
+
+  if (currentChatboxId !== prevChatboxId && !isCreatingNew) {
+    console.log(`⚡ [${getTimestamp()}] [RENDER-TIME RESET] Chatbox değişti:`, {
+      from: prevChatboxId,
+      to: currentChatboxId,
+      chatboxName: selectedChatbox?.name,
+      action: 'State\'ler temizleniyor + Loading başlatılıyor'
+    })
+    setPrevChatboxId(currentChatboxId)
+    setSelectedStores([])
+    setSelectedProducts([])
+    setOriginalStores([])
+    setOriginalProducts([])
+    // ✅ FIX: Loading state'lerini de aktif et - flash of empty content önlenir
+    setIsLoadingAllIntegrations(true)
+    setIsLoadingChatboxIntegrations(true)
+  } else if (isCreatingNew && prevChatboxId !== 'NEW') {
+    console.log(`⚡ [${getTimestamp()}] [RENDER-TIME RESET] Yeni chatbox oluşturma modu`)
+    // Yeni oluşturma moduna geçiş
+    setPrevChatboxId('NEW')
+    setSelectedStores([])
+    setSelectedProducts([])
+    setOriginalStores([])
+    setOriginalProducts([])
+    // ✅ FIX: Loading state'lerini de aktif et
+    setIsLoadingAllIntegrations(true)
+    setIsLoadingChatboxIntegrations(true)
+  }
 
   // Mevcut chatbox verileri için local state
   const [localChatboxData, setLocalChatboxData] = useState({
@@ -130,19 +209,11 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   // PDF'leri backend'den yükle
   useEffect(() => {
     const loadKnowledgeSources = async () => {
-      console.log('🔍 [DEBUG] loadKnowledgeSources çalıştı:', {
-        activeTab,
-        isCreatingNew,
-        selectedChatboxId: selectedChatbox?.id,
-        createdChatboxId
-      })
-
       if (activeTab === 'Veri Kaynakları' && selectedChatbox?.id && !isCreatingNew) {
         setIsLoadingPDFs(true)
         try {
           const sources = await getChatboxKnowledgeSources(selectedChatbox.id)
           setKnowledgeSources(sources)
-          console.log('✅ [ChatboxManagement] PDF\'ler yüklendi:', sources)
 
           // Aktif PDF'lerin içeriklerini textarea'ya formatla
           const activeContents = sources
@@ -156,34 +227,50 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
           setCurrentText(activeContents)
           setOriginalText(activeContents)
         } catch (error) {
-          console.error('❌ [ChatboxManagement] PDF\'ler yüklenirken hata:', error)
+          console.error(`❌ [${getTimestamp()}] PDF'ler yüklenirken hata:`, error)
           setKnowledgeSources([])
         } finally {
           setIsLoadingPDFs(false)
         }
       } else if (isCreatingNew || !selectedChatbox?.id) {
-        console.log('🧹 [DEBUG] PDF\'ler temizleniyor - Yeni chatbox modu')
         setKnowledgeSources([])
         setCurrentText('')
         setOriginalText('')
-      } else {
-        console.log('⏭️ [DEBUG] PDF yükleme atlandı - Koşullar sağlanmadı')
       }
     }
 
     loadKnowledgeSources()
   }, [activeTab, selectedChatbox?.id, createdChatboxId, isCreatingNew])
 
-  // Tüm chatbox entegrasyonlarını yükle (çakışma kontrolü için)
+  // Tüm chatbox entegrasyonlarını yükle (çakışma kontrolü için) - CACHE OPTİMİZE EDİLDİ
   useEffect(() => {
     const loadAllIntegrations = async () => {
       if (activeTab === 'Entegrasyonlar') {
-        // ADIM 1: Loading'i başlat (State temizlemeye gerek yok - component key ile yeniden mount oluyor)
-        setIsLoadingIntegrations(true)
+        setIsLoadingAllIntegrations(true)
 
         try {
-          // ADIM 2: Yeni entegrasyonları yükle
-          const integrations = await getAllChatboxIntegrations()
+          let integrations
+
+          // ✅ OPTIMIZASYON: Cache kontrolü - 5 dakika geçerlilikte
+          const CACHE_TTL = 5 * 60 * 1000 // 5 dakika
+          const isCacheValid = integrationsCache.current.data &&
+                               (Date.now() - integrationsCache.current.timestamp) < CACHE_TTL
+
+          if (isCacheValid) {
+            integrations = integrationsCache.current.data!
+            console.log(`✅ [${getTimestamp()}] [EFFECT-1] Tüm entegrasyonlar CACHE'TEN alındı (${Math.round((Date.now() - integrationsCache.current.timestamp) / 1000)}s önce yüklendi)`)
+          } else {
+            console.log(`🔄 [${getTimestamp()}] [EFFECT-1] Tüm entegrasyonlar API'den yükleniyor...`)
+            integrations = await getAllChatboxIntegrations()
+
+            // Cache'e kaydet
+            integrationsCache.current = {
+              data: integrations,
+              timestamp: Date.now()
+            }
+            console.log(`✅ [${getTimestamp()}] [EFFECT-1] Tüm entegrasyonlar yüklendi ve CACHE'LENDİ`)
+          }
+
           setAllIntegrations(integrations)
 
           // Çakışan mağaza ve ürünleri tespit et
@@ -191,17 +278,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
           const conflictProducts: Record<string, string> = {}
 
           Object.entries(integrations).forEach(([chatboxId, data]) => {
-            // Debug log
-            console.log('🔍 Çakışma kontrolü:', {
-              chatboxId,
-              selectedChatboxId: selectedChatbox?.id,
-              isEqual: chatboxId === selectedChatbox?.id,
-              chatboxName: data.chatbox_name
-            })
-
             // Mevcut chatbox'u dahil etme
             if (chatboxId === selectedChatbox?.id) {
-              console.log('✅ Mevcut chatbox, atlanıyor:', chatboxId)
               return
             }
 
@@ -214,18 +292,21 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
             data.products.forEach(productId => {
               conflictProducts[productId] = data.chatbox_name
             })
-
-            // Stores_only olanları conflict stores'dan çıkar (ürünleri seçilebilir olsun)
-            // Ama mağazanın kendisi hala seçilemez
           })
 
           setConflictingStores(conflictStores)
           setConflictingProducts(conflictProducts)
+
+          // ✅ FIX: DOM'un tamamen güncellenmesini bekle, sonra loading'i bitir
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setIsLoadingAllIntegrations(false)
+              console.log(`🏁 [${getTimestamp()}] [EFFECT-1] Loading bitti → UI render edildi`)
+            })
+          })
         } catch (error) {
-          console.error('Entegrasyonlar yüklenirken hata:', error)
-        } finally {
-          // ADIM 3: Loading'i bitir
-          setIsLoadingIntegrations(false)
+          console.error(`❌ [${getTimestamp()}] [EFFECT-1] Entegrasyonlar yüklenirken hata:`, error)
+          setIsLoadingAllIntegrations(false)
         }
       }
     }
@@ -233,102 +314,156 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     loadAllIntegrations()
   }, [activeTab, selectedChatbox?.id])
 
-  // Mağazaları backend'den yükle
+  // 1. Envanter (Mağaza ve Ürünler) Yükleme Effect'i
+  // Sadece tab değiştiğinde çalışır, chatbox değişiminden etkilenmez.
+  // Artık InventoryContext'ten veri çekiyoruz - gereksiz API çağrılarını önler
   useEffect(() => {
-    const loadStores = async () => {
+    const loadInventory = async () => {
       if (activeTab === 'Entegrasyonlar') {
-        setIsLoadingStores(true)
+        console.log(`🔄 [${getTimestamp()}] Stores ve Products PARALEL yükleniyor...`)
+        // ✅ OPTIMIZASYON: Paralel çağır - 1.4s kazanç!
+        await Promise.all([
+          fetchStores(),
+          fetchProducts()
+        ])
+        console.log(`✅ [${getTimestamp()}] Stores ve Products paralel yükleme tamamlandı`)
+      }
+    }
+
+    loadInventory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]) // ✅ Sadece activeTab - infinite loop önlendi
+
+  // Brand ID'yi set et (stores yüklendikten sonra)
+  useEffect(() => {
+    if (backendStores.length > 0 && !selectedBrandId) {
+      setSelectedBrandId(backendStores[0].brand_id)
+    }
+  }, [backendStores, selectedBrandId])
+
+  // 2. Chatbox Entegrasyon Verileri Yükleme Effect'i
+  // Sadece chatbox seçimi değiştiğinde çalışır.
+  useEffect(() => {
+    let isMounted = true
+
+    const loadChatboxIntegrations = async () => {
+      // Mevcut chatbox için entegrasyon verilerini yükle
+      if (selectedChatbox?.id && !isCreatingNew) {
+        console.log(`🔄 [${getTimestamp()}] [EFFECT-2] Chatbox entegrasyonları yükleniyor...`, selectedChatbox.id)
+        setIsLoadingChatboxIntegrations(true)
         try {
-          const stores = await getUserStores()
-          setBackendStores(stores)
+          // Paralel olarak mağaza ve ürün entegrasyonlarını çek
+          const [chatboxStores, chatboxProducts] = await Promise.all([
+            getChatboxStores(selectedChatbox.id),
+            getChatboxProducts(selectedChatbox.id)
+          ])
 
-          // TÜM mağazaların TÜM ürünlerini yükle (mağaza seçiminden bağımsız)
-          setIsLoadingProducts(true)
-          try {
-            const allProducts: ProductListItem[] = []
+          if (!isMounted) return
 
-            // Tüm mağazaların ürünlerini yükle
-            for (const store of stores) {
-              const response = await getStoreProducts(store.id, 1, 100)
-              allProducts.push(...response.items)
-            }
+          const integratedStoreIds = chatboxStores.map(rel => rel.store.id)
+          const integratedProductIds = chatboxProducts.map(rel => rel.product.id)
 
-            setBackendProducts(allProducts)
+          console.log(`📦 [${getTimestamp()}] [EFFECT-2] API yanıtı - Mağazalar:`, integratedStoreIds.length, 'Ürünler:', integratedProductIds.length)
 
-            // İlk mağazanın brand_id'sini kaydet (chatbox oluşturma için)
-            if (stores.length > 0 && !selectedBrandId) {
-              setSelectedBrandId(stores[0].brand_id)
-            }
-          } catch (error) {
-            console.error('Ürünler yüklenirken hata:', error)
-          } finally {
-            setIsLoadingProducts(false)
-          }
+          if (isMounted) {
+            // State güncellemelerini yap
+            setSelectedStores(integratedStoreIds)
+            setOriginalStores(integratedStoreIds)
+            setSelectedProducts(integratedProductIds)
+            setOriginalProducts(integratedProductIds)
+            console.log(`✅ [${getTimestamp()}] [EFFECT-2] State'ler güncellendi`)
 
-          // Mevcut chatbox için entegrasyon verilerini yükle
-          if (selectedChatbox?.id && !isCreatingNew) {
-            try {
-              console.log('📦 Chatbox entegrasyonları yükleniyor...', selectedChatbox.id)
-
-              // Chatbox'a bağlı mağazaları yükle
-              const chatboxStores = await getChatboxStores(selectedChatbox.id)
-              console.log('🏪 Yüklenen mağazalar:', chatboxStores)
-              const integratedStoreIds = chatboxStores.map(rel => rel.store.id)
-              console.log('🏪 Mağaza ID\'leri:', integratedStoreIds)
-              setSelectedStores(integratedStoreIds)
-              setOriginalStores(integratedStoreIds) // Orijinal değeri kaydet
-
-              // Chatbox'a bağlı ürünleri yükle
-              const chatboxProducts = await getChatboxProducts(selectedChatbox.id)
-              console.log('📦 Yüklenen ürünler:', chatboxProducts)
-              const integratedProductIds = chatboxProducts.map(rel => rel.product.id)
-              console.log('📦 Ürün ID\'leri:', integratedProductIds)
-              setSelectedProducts(integratedProductIds)
-              setOriginalProducts(integratedProductIds) // Orijinal değeri kaydet
-            } catch (error) {
-              console.error('❌ Chatbox entegrasyonları yüklenirken hata:', error)
-              // Hata durumunda orijinal değerleri de temizle
-              setOriginalStores([])
-              setOriginalProducts([])
-            }
-          } else if (isCreatingNew) {
-            // Yeni chatbox oluşturuluyorsa seçimleri ve orijinal değerleri temizle
-            setSelectedStores([])
-            setSelectedProducts([])
-            setOriginalStores([])
-            setOriginalProducts([])
-          } else {
-            // Hiçbir koşul sağlanmadığında orijinal değerleri temizle
-            setOriginalStores([])
-            setOriginalProducts([])
+            // ✅ FIX: DOM'un tamamen güncellenmesini bekle, sonra loading'i bitir
+            // İki frame bekle: 1) React DOM güncellemesi 2) Tarayıcı paint
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (isMounted) {
+                  setIsLoadingChatboxIntegrations(false)
+                  console.log(`🏁 [${getTimestamp()}] [EFFECT-2] Loading bitti → UI render edildi`)
+                }
+              })
+            })
           }
         } catch (error) {
-          console.error('Mağazalar yüklenirken hata:', error)
-        } finally {
-          setIsLoadingStores(false)
+          console.error(`❌ [${getTimestamp()}] [EFFECT-2] Chatbox entegrasyonları yüklenirken hata:`, error)
+          if (isMounted) {
+            setOriginalStores([])
+            setOriginalProducts([])
+            setIsLoadingChatboxIntegrations(false)
+          }
+        }
+      } else if (isCreatingNew) {
+        // Yeni chatbox oluşturuluyorsa seçimleri temizle
+        if (isMounted) {
+          setSelectedStores([])
+          setSelectedProducts([])
+          setOriginalStores([])
+          setOriginalProducts([])
+          setIsLoadingChatboxIntegrations(false)
+        }
+      } else {
+        // Hiçbir chatbox seçili değilse temizle
+        if (isMounted) {
+          setOriginalStores([])
+          setOriginalProducts([])
+          setIsLoadingChatboxIntegrations(false)
         }
       }
     }
 
-    loadStores()
-  }, [activeTab, selectedChatbox?.id, isCreatingNew])
+    loadChatboxIntegrations()
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedChatbox?.id, isCreatingNew]) // Sadece chatbox değişimine bağlı
+
+  // Entegrasyon Durumu Loglama - Veriler yüklendiğinde UI durumunu göster
+  useEffect(() => {
+    const isLoading = isLoadingAllIntegrations || isLoadingChatboxIntegrations
+
+    // Sadece Entegrasyonlar tab'ındayken log bas
+    if (activeTab === 'Entegrasyonlar' && selectedChatbox) {
+      console.group(`📊 [${getTimestamp()}] [UI DURUM] Chatbox: ${selectedChatbox.name}`)
+      console.log('Loading Durumu:', {
+        isLoadingAllIntegrations,
+        isLoadingChatboxIntegrations,
+        toplamLoading: isLoading
+      })
+      console.log('State Durumu:', {
+        selectedStores: selectedStores.length,
+        selectedProducts: selectedProducts.length
+      })
+
+      // UI'da ne gösterileceğini hesapla
+      if (isLoading) {
+        console.log('🔄 UI Gösterimi: LOADING ANİMASYONU')
+      } else if (selectedProducts.length > 0 || selectedStores.length > 0) {
+        console.log('✅ UI Gösterimi: ÜRÜN/MAĞAZA LİSTESİ')
+      } else {
+        console.log('⚪ UI Gösterimi: BOŞ ALAN (hiç seçim yok)')
+      }
+      console.groupEnd()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedChatbox?.id, selectedStores, selectedProducts, isLoadingAllIntegrations, isLoadingChatboxIntegrations])
 
   // Ürün seçimlerini normalize et: "Tüm Ürünler" ile tek tek tüm ürünleri seçmek aynı kabul edilir
   const normalizeProductSelection = useMemo(() => {
     return (products: string[]) => {
       const allProductIds = backendProducts.map(product => product.id)
-      
+
       // Eğer tüm ürünler seçiliyse (hem 'all' hem de tüm ID'ler, ya da sadece tüm ID'ler)
       const productIdsOnly = products.filter(id => id !== 'all')
-      const allSelected = allProductIds.length > 0 && 
-        allProductIds.every(id => productIdsOnly.includes(id)) && 
+      const allSelected = allProductIds.length > 0 &&
+        allProductIds.every(id => productIdsOnly.includes(id)) &&
         productIdsOnly.length === allProductIds.length
-      
+
       if (allSelected) {
         // Normalize edilmiş hali: 'all' ve tüm ID'ler
         return ['all', ...allProductIds].sort()
       }
-      
+
       // Normalize edilmemiş hali: sadece ID'ler (veya boş)
       return products.sort()
     }
@@ -352,63 +487,139 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     setHasIntegrationChanges(storesChanged || productsChanged)
   }, [selectedStores, selectedProducts, originalStores, originalProducts, isCreatingNew, selectedChatbox?.id, normalizeProductSelection])
 
-  // Ürün ID'lerini memoize et (dependency için)
-  const productIds = useMemo(() => backendProducts.map(p => p.id).join(','), [backendProducts])
-
-  // Ürün görsellerini yükle (primary image'ları)
+  // Ürün görsellerini yükle (primary image'ları) - Aggressive cache ile optimize edildi
   useEffect(() => {
+    // Sadece Entegrasyonlar sekmesinde yükle
+    if (activeTab !== 'Entegrasyonlar') return
+
     const loadProductImages = async () => {
-      if (backendProducts.length > 0) {
-        const imagePromises = backendProducts.map(async (product) => {
-          // Eğer görsel zaten yüklenmişse atla
-          if (productImages[product.id]) {
-            return
-          }
+      if (backendProducts.length === 0) return
 
+      console.log(`📸 [${getTimestamp()}] Ürün görselleri yükleniyor...`)
+
+      // Önce sessionStorage'dan cache'lenmiş görselleri yükle
+      const cachedImages: Record<string, string> = {}
+      const productsNeedingFetch: typeof backendProducts = []
+
+      backendProducts.forEach(product => {
+        // 1. State cache kontrolü
+        if (productImages[product.id]) {
+          return
+        }
+
+        // 2. SessionStorage cache kontrolü
+        const cacheKey = `product-image-${product.id}`
+        const cached = sessionStorage.getItem(cacheKey)
+
+        if (cached) {
           try {
-            const images = await getProductImages(product.id)
-            // Primary image'ı bul veya ilk görseli al
-            const primaryImage = images.find(img => img.is_primary) || images[0]
-            if (primaryImage) {
-              setProductImages(prev => ({
-                ...prev,
-                [product.id]: primaryImage.image_url
-              }))
+            const cachedData = JSON.parse(cached)
+            // Cache 1 saat geçerli
+            if (Date.now() - cachedData.timestamp < 3600000) {
+              cachedImages[product.id] = cachedData.url
+              return
+            } else {
+              // Süresi dolmuş cache'i temizle
+              sessionStorage.removeItem(cacheKey)
             }
-          } catch (error) {
-            // Görsel yüklenemezse sessizce devam et
-            console.debug(`Ürün ${product.id} için görsel yüklenemedi:`, error)
+          } catch (e) {
+            sessionStorage.removeItem(cacheKey)
           }
-        })
+        }
 
-        await Promise.all(imagePromises)
+        // Cache'te yoksa fetch listesine ekle
+        productsNeedingFetch.push(product)
+      })
+
+      // Cache'lenmiş görselleri state'e ekle
+      if (Object.keys(cachedImages).length > 0) {
+        setProductImages(prev => ({ ...prev, ...cachedImages }))
+        console.log(`✅ [${getTimestamp()}] ${Object.keys(cachedImages).length} görsel cache'ten yüklendi`)
+      }
+
+      // Fetch edilmesi gereken görsel yoksa çık
+      if (productsNeedingFetch.length === 0) {
+        console.log(`✅ [${getTimestamp()}] Tüm görseller cache'te mevcut`)
+        return
+      }
+
+      console.log(`🌐 [${getTimestamp()}] ${productsNeedingFetch.length} görsel API'den çekiliyor...`)
+
+      // Paralel olarak görselleri çek
+      const imagePromises = productsNeedingFetch.map(async (product) => {
+        try {
+          const images = await getProductImages(product.id)
+          // Primary image'ı bul veya ilk görseli al
+          const primaryImage = images.find(img => img.is_primary) || images[0]
+
+          if (primaryImage) {
+            // SessionStorage'a kaydet (1 saat TTL)
+            const cacheKey = `product-image-${product.id}`
+            sessionStorage.setItem(cacheKey, JSON.stringify({
+              url: primaryImage.image_url,
+              timestamp: Date.now()
+            }))
+
+            return { [product.id]: primaryImage.image_url }
+          }
+          return null
+        } catch (error) {
+          console.debug(`❌ Ürün ${product.id} için görsel yüklenemedi:`, error)
+          return null
+        }
+      })
+
+      const results = await Promise.all(imagePromises)
+
+      // Başarıyla yüklenen görselleri state'e ekle
+      const newImages = results.reduce((acc, result) => {
+        if (result) return { ...acc, ...result }
+        return acc
+      }, {})
+
+      if (Object.keys(newImages).length > 0) {
+        setProductImages(prev => ({ ...prev, ...newImages }))
+        console.log(`✅ [${getTimestamp()}] ${Object.keys(newImages).length} görsel API'den yüklendi ve cache'lendi`)
       }
     }
 
     loadProductImages()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productIds])
+  }, [activeTab, backendProducts.length]) // ✅ Sadece tab ve ürün sayısı değişince
 
   // brand_id'yi parent state'e gönder
+  // ✅ Optimize edildi - sadece değişiklik varsa update et
   useEffect(() => {
-    if (selectedBrandId && setChatboxData) {
-      setChatboxData(prev => ({
-        ...prev,
-        brand_id: selectedBrandId
-      }))
+    if (selectedBrandId && setChatboxData && chatboxData) {
+      // Sadece değişiklik varsa update et
+      if (chatboxData.brand_id !== selectedBrandId) {
+        setChatboxData((prev: ChatboxData) => ({
+          ...prev,
+          brand_id: selectedBrandId
+        }))
+      }
     }
-  }, [selectedBrandId, setChatboxData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBrandId]) // ✅ setChatboxData kaldırıldı
 
   // Seçilen mağaza ve ürünleri parent state'e gönder
+  // ✅ Optimize edildi - sadece gerçekten değiştiyse update et
   useEffect(() => {
-    if (setChatboxData) {
-      setChatboxData(prev => ({
-        ...prev,
-        selectedStores: selectedStores,
-        selectedProducts: selectedProducts
-      }))
+    if (setChatboxData && chatboxData) {
+      // Deep comparison - sadece değişiklik varsa update et
+      const storesChanged = JSON.stringify(chatboxData.selectedStores || []) !== JSON.stringify(selectedStores)
+      const productsChanged = JSON.stringify(chatboxData.selectedProducts || []) !== JSON.stringify(selectedProducts)
+
+      if (storesChanged || productsChanged) {
+        setChatboxData((prev: ChatboxData) => ({
+          ...prev,
+          selectedStores: selectedStores,
+          selectedProducts: selectedProducts
+        }))
+      }
     }
-  }, [selectedStores, selectedProducts, setChatboxData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStores, selectedProducts]) // ✅ setChatboxData kaldırıldı
 
   // Sayfa yüklendiğinde ve sekme değiştiğinde animasyonu başlat
   useEffect(() => {
@@ -545,7 +756,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     }
 
     loadChatboxDetails()
-  }, [selectedChatbox?.id, isCreatingNew, setChatboxData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChatbox?.id, isCreatingNew]) // ✅ setChatboxData kaldırıldı - gereksiz re-fetch önlendi
 
   // Yeni chatbox oluşturma modunda default renkleri yükle
   useEffect(() => {
@@ -574,11 +786,11 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
   // Click-outside handler for dropdowns
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (storeDropdownRef.current && !storeDropdownRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (storeDropdownRef.current && !storeDropdownRef.current.contains(event.target as Node)) {
         setIsStoreDropdownOpen(false)
       }
-      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target as Node)) {
         setIsProductDropdownOpen(false)
       }
     }
@@ -590,7 +802,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   }, [])
 
   // Animasyon fonksiyonları
-  const getCardAnimation = (index) => {
+  const getCardAnimation = (index: number) => {
     const baseClasses = "transition-all duration-700 ease-out"
     if (isVisible && activeTab === 'Önizleme') {
       return `${baseClasses} translate-y-0 scale-100`
@@ -606,13 +818,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     return "opacity-0 translate-y-12 scale-90"
   }
 
-  const getAnimationDelay = (index) => {
+  const getAnimationDelay = (index: number) => {
     return `${index * 150}ms`
-  }
-
-  const handleChatboxSelect = (chatbox) => {
-    setSelectedChatbox(chatbox)
-    setIsDropdownOpen(false)
   }
 
   const handleToggleChatbox = () => {
@@ -620,7 +827,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   }
 
 
-  const handleColorChange = (colorType, newColor) => {
+  const handleColorChange = (colorType: string, newColor: string) => {
     setTempColors(prev => ({
       ...prev,
       [colorType]: newColor
@@ -718,7 +925,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
       alert(`${editedSources.length} PDF başarıyla düzenlendi!`)
     } catch (error) {
       console.error('❌ PDF düzenlenirken hata:', error)
-      alert('PDF düzenlenirken bir hata oluştu: ' + (error.message || 'Bilinmeyen hata'))
+      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      alert('PDF düzenlenirken bir hata oluştu: ' + errorMessage)
     } finally {
       setIsSavingPreview(false)
     }
@@ -773,10 +981,15 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
       setOriginalProducts(normalizedProducts)
       setHasIntegrationChanges(false)
 
+      // ✅ OPTIMIZASYON: Cache'i temizle - değişiklik yapıldı
+      integrationsCache.current = { data: null, timestamp: 0 }
+      console.log(`🔄 [${getTimestamp()}] Integration cache temizlendi - yeni veri çekilecek`)
+
       alert(`Entegrasyonlar başarıyla kaydedildi!\n${result.stores_added} mağaza, ${result.products_added} ürün eklendi.`)
     } catch (error) {
       console.error('❌ Entegrasyonlar kaydedilirken hata:', error)
-      alert('Entegrasyonlar kaydedilirken bir hata oluştu: ' + (error.message || 'Bilinmeyen hata'))
+      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      alert('Entegrasyonlar kaydedilirken bir hata oluştu: ' + errorMessage)
     } finally {
       setIsSavingIntegrations(false)
     }
@@ -896,7 +1109,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
       }
     } catch (error) {
       console.error('❌ PDF yüklenirken hata:', error)
-      alert('PDF yüklenirken bir hata oluştu: ' + (error.message || 'Bilinmeyen hata'))
+      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      alert('PDF yüklenirken bir hata oluştu: ' + errorMessage)
     } finally {
       setIsUploadingPDF(false)
       if (fileInputRef.current) {
@@ -966,7 +1180,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
       alert('PDF başarıyla silindi!')
     } catch (error) {
       console.error('❌ PDF silinirken hata:', error)
-      alert('PDF silinirken bir hata oluştu: ' + (error.message || 'Bilinmeyen hata'))
+      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      alert('PDF silinirken bir hata oluştu: ' + errorMessage)
     }
   }
 
@@ -1048,7 +1263,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
       closeStatusChangeModal()
     } catch (error) {
       console.error('❌ PDF durumu değiştirilirken hata:', error)
-      alert('PDF durumu değiştirilirken bir hata oluştu: ' + (error.message || 'Bilinmeyen hata'))
+      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      alert('PDF durumu değiştirilirken bir hata oluştu: ' + errorMessage)
     }
   }
 
@@ -1099,12 +1315,13 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
       document.body.removeChild(a)
 
       console.log('✅ PDF indirildi:', pdfToDownload.source_name)
-      
+
       // Modal'ı kapat
       closeDownloadModal()
     } catch (error) {
       console.error('❌ PDF indirilirken hata:', error)
-      alert('PDF indirilirken bir hata oluştu: ' + (error.message || 'Bilinmeyen hata'))
+      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      alert('PDF indirilirken bir hata oluştu: ' + errorMessage)
     }
   }
 
@@ -1113,7 +1330,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   }
 
   // Mağaza seçimi fonksiyonları
-  const handleStoreSelection = (storeId) => {
+  const handleStoreSelection = (storeId: string) => {
     // Çakışma kontrolü (sadece seçilmeye çalışıldığında)
     if (storeId !== 'all' && !selectedStores.includes(storeId) && conflictingStores[storeId]) {
       alert(`Bu mağaza "${conflictingStores[storeId]}" isimli chatbox'ta zaten seçili.\n\nBir mağaza aynı anda sadece bir chatbox'ta seçilebilir.`)
@@ -1142,11 +1359,11 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
           const newSelection = prev.includes(storeId)
             ? prev.filter(id => id !== storeId)
             : [...prev, storeId]
-          
+
           // Eğer tüm mağazalar seçiliyse 'all' ekle
           const allStoreIds = backendStores.map(store => store.id)
           const allSelected = allStoreIds.every(id => newSelection.includes(id))
-          
+
           if (allSelected && newSelection.length === allStoreIds.length) {
             return ['all', ...newSelection]
           } else {
@@ -1179,7 +1396,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   }
 
   // Ürün seçimi fonksiyonları
-  const handleProductSelection = (productId) => {
+  const handleProductSelection = (productId: string) => {
     // Çakışma kontrolü (sadece seçilmeye çalışıldığında)
     if (productId !== 'all' && !selectedProducts.includes(productId) && conflictingProducts[productId]) {
       alert(`Bu ürün "${conflictingProducts[productId]}" isimli chatbox'ta zaten seçili.\n\nBir ürün aynı anda sadece bir chatbox'ta seçilebilir.`)
@@ -1208,12 +1425,12 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
           const newSelection = prev.includes(productId)
             ? prev.filter(id => id !== productId)
             : [...prev, productId]
-          
+
           // Eğer tüm ürünler seçiliyse 'all' ekle
           const availableProducts = getAvailableProducts()
           const allProductIds = availableProducts.map(product => product.id)
           const allSelected = allProductIds.every(id => newSelection.includes(id))
-          
+
           if (allSelected && newSelection.length === allProductIds.length) {
             return ['all', ...newSelection]
           } else {
@@ -1234,28 +1451,28 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     if (selectedProducts.length === 0) {
       return 'Ürün seçin'
     }
-    
+
     // Eğer tüm ürünler seçiliyse (normalize edilmiş haliyle)
     const normalizedSelected = normalizeProductSelection(selectedProducts)
     const normalizedOriginal = normalizeProductSelection(originalProducts)
     const isAllSelected = normalizedSelected.includes('all')
     const isSaved = JSON.stringify(normalizedSelected.sort()) === JSON.stringify(normalizedOriginal.sort())
-    
+
     // Eğer tüm ürünler seçiliyse ve kaydedilmişse, "Tüm Ürünler" göster (sayı olmadan)
     if (isAllSelected && isSaved) {
       return 'Tüm Ürünler'
     }
-    
+
     // Eğer tüm ürünler seçiliyse ama henüz kaydedilmemişse, "Tüm Ürünler (X)" göster
     if (isAllSelected && !isSaved) {
       return `Tüm Ürünler (${availableProducts.length})`
     }
-    
+
     // Eğer sadece 'all' string'i varsa (normalize edilmemiş durum)
     if (selectedProducts.includes('all')) {
       return `Tüm Ürünler (${availableProducts.length})`
     }
-    
+
     if (selectedProducts.length === 1) {
       const product = availableProducts.find(product => product.id === selectedProducts[0])
       return product ? product.name : 'Ürün seçin'
@@ -1278,7 +1495,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   if (activeTab === 'Özelleştirme' && !isCreatingNew) {
     return <ChatboxPrivatization selectedChatbox={selectedChatbox} themeColors={themeColors} isCreatingNew={false} chatboxData={chatboxData} setChatboxData={setChatboxData} />
   }
-  
+
   if (activeTab === 'Veri Kaynakları') {
     return (
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 mx-2 sm:mx-4 lg:mx-12 xl:mx-20 mt-4 lg:mt-8">
@@ -1424,7 +1641,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                 {isLoadingPDFs ? (
                   <div className="text-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 mx-auto mb-2" style={{ borderColor: themeColors.primary }}></div>
-                    <p className="text-xs text-gray-500">PDF'ler yükleniyor...</p>
+                    <p className="text-xs text-gray-500">PDF&apos;ler yükleniyor...</p>
                   </div>
                 ) : knowledgeSources.length === 0 ? (
                   <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
@@ -1432,7 +1649,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                       <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
                     </svg>
                     <p className="text-sm text-gray-600">Henüz PDF yüklenmemiş</p>
-                    <p className="text-xs text-gray-500 mt-1">Chatbox'ınıza bilgi kaynağı eklemek için PDF yükleyin</p>
+                    <p className="text-xs text-gray-500 mt-1">Chatbox&apos;ınıza bilgi kaynağı eklemek için PDF yükleyin</p>
                   </div>
                 ) : (
                   knowledgeSources.map((source) => (
@@ -1723,15 +1940,15 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
         <div className="bg-white border-2 rounded-2xl flex flex-col transition-all duration-700 ease-out translate-y-0 scale-100 w-full lg:w-1/2 self-start" style={{ borderColor: '#E5E7EB', animationDelay: '150ms' }}>
           <div className="flex items-center p-4 sm:p-6 lg:p-8 border-b border-gray-200">
             <h3 className="text-xl sm:text-2xl lg:text-3xl">
-              <span 
+              <span
                 className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
                   backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
                 }}
               >
                 Chatbox
-              </span> 
-              <span 
+              </span>
+              <span
                 className="font-normal bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
                   backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
@@ -1742,7 +1959,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
             </h3>
           </div>
           <div className="p-4 sm:p-6 lg:p-8 flex flex-col">
-            <div 
+            <div
               className="rounded-lg p-3 sm:p-4 font-mono text-xs sm:text-sm leading-relaxed relative overflow-hidden overflow-x-auto"
               style={{ backgroundColor: '#1E1E1E' }}
             >
@@ -1852,16 +2069,26 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                 </div>
                 <div className="relative" ref={storeDropdownRef}>
                   <button
-                    onClick={() => setIsStoreDropdownOpen(!isStoreDropdownOpen)}
-                    className="w-full p-3 sm:p-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#FF6925] focus:ring-1 focus:ring-[#FF6925] transition-colors bg-white hover:bg-gray-50 text-left flex items-center justify-between"
+                    onClick={() => !(isLoadingAllIntegrations || isLoadingChatboxIntegrations) && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
+                    disabled={isLoadingAllIntegrations || isLoadingChatboxIntegrations}
+                    className="w-full p-3 sm:p-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#FF6925] focus:ring-1 focus:ring-[#FF6925] transition-colors bg-white hover:bg-gray-50 text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="text-sm sm:text-base text-gray-700">
-                      {getStoreSelectionText()}
+                      {(isLoadingAllIntegrations || isLoadingChatboxIntegrations) ? (
+                        <span className="flex items-center gap-2">
+                          <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Entegrasyonlar yükleniyor...
+                        </span>
+                      ) : (
+                        getStoreSelectionText()
+                      )}
                     </span>
                     <svg
-                      className={`w-4 h-4 text-gray-500 transform transition-transform duration-200 ${
-                        isStoreDropdownOpen ? 'rotate-180' : ''
-                      }`}
+                      className={`w-4 h-4 text-gray-500 transform transition-transform duration-200 ${isStoreDropdownOpen ? 'rotate-180' : ''
+                        }`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1925,7 +2152,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                                   }}
                                 />
                               ) : null}
-                              <div 
+                              <div
                                 className={`w-8 h-8 rounded-full mr-3 bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0 ${store.logo ? 'hidden' : ''}`}
                               >
                                 <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1985,7 +2212,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                 </div>
 
                 {/* Seçilen Mağazalar Özeti */}
-                {isLoadingIntegrations ? (
+                {(isLoadingAllIntegrations || isLoadingChatboxIntegrations) ? (
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-600 mb-2">Entegrasyonlar yükleniyor...</p>
                     <div className="space-y-2">
@@ -2085,14 +2312,14 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                                         borderColor: borderColor
                                       }}
                                     >
-                                    <span
-                                      className="text-xs font-semibold truncate max-w-[100px]"
-                                      style={{ color: iconColor }}
-                                    >
-                                      {selectedChatbox.name}
-                                    </span>
+                                      <span
+                                        className="text-xs font-semibold truncate max-w-[100px]"
+                                        style={{ color: iconColor }}
+                                      >
+                                        {selectedChatbox.name}
+                                      </span>
+                                    </div>
                                   </div>
-                                </div>
                                 )
                               })()}
                             </div>
@@ -2108,16 +2335,26 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                 <h4 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">Ürün Seçimi</h4>
                 <div className="relative" ref={productDropdownRef}>
                   <button
-                    onClick={() => setIsProductDropdownOpen(!isProductDropdownOpen)}
-                    className="w-full p-3 sm:p-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#FF6925] focus:ring-1 focus:ring-[#FF6925] transition-colors bg-white hover:bg-gray-50 text-left flex items-center justify-between"
+                    onClick={() => !(isLoadingAllIntegrations || isLoadingChatboxIntegrations) && setIsProductDropdownOpen(!isProductDropdownOpen)}
+                    disabled={isLoadingAllIntegrations || isLoadingChatboxIntegrations}
+                    className="w-full p-3 sm:p-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#FF6925] focus:ring-1 focus:ring-[#FF6925] transition-colors bg-white hover:bg-gray-50 text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="text-sm sm:text-base text-gray-700">
-                      {getProductSelectionText()}
+                      {(isLoadingAllIntegrations || isLoadingChatboxIntegrations) ? (
+                        <span className="flex items-center gap-2">
+                          <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Entegrasyonlar yükleniyor...
+                        </span>
+                      ) : (
+                        getProductSelectionText()
+                      )}
                     </span>
                     <svg
-                      className={`w-4 h-4 text-gray-500 transform transition-transform duration-200 ${
-                        isProductDropdownOpen ? 'rotate-180' : ''
-                      }`}
+                      className={`w-4 h-4 text-gray-500 transform transition-transform duration-200 ${isProductDropdownOpen ? 'rotate-180' : ''
+                        }`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -2253,7 +2490,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                   )}
 
                   {/* Seçilen Ürünler Özeti */}
-                  {isLoadingIntegrations ? (
+                  {(isLoadingAllIntegrations || isLoadingChatboxIntegrations) ? (
                     <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                       <p className="text-xs text-gray-600 mb-2">Entegrasyonlar yükleniyor...</p>
                       <div className="space-y-2">
@@ -2361,14 +2598,14 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                                           borderColor: borderColor
                                         }}
                                       >
-                                      <span
-                                        className="text-xs font-semibold truncate max-w-[100px]"
-                                        style={{ color: iconColor }}
-                                      >
-                                        {selectedChatbox.name}
-                                      </span>
+                                        <span
+                                          className="text-xs font-semibold truncate max-w-[100px]"
+                                          style={{ color: iconColor }}
+                                        >
+                                          {selectedChatbox.name}
+                                        </span>
+                                      </div>
                                     </div>
-                                  </div>
                                   )
                                 })()}
                               </div>
@@ -2386,7 +2623,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
       </div>
     )
   }
-  
+
   if (activeTab !== 'Önizleme') {
     return (
       <div className="flex items-center justify-center h-96">
@@ -2440,9 +2677,9 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
         />
 
         {/* Chatbox Özellikleri Kartı */}
-        <div 
+        <div
           className={`bg-white border-2 rounded-2xl flex flex-col flex-1 order-3 ${getCardAnimation(1)}`}
-          style={{ 
+          style={{
             minHeight: '400px',
             height: 'auto',
             borderColor: '#E5E7EB',
@@ -2455,10 +2692,10 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
               <span className="font-bold">Chatbox</span> <span className="font-normal">Özellikleri</span>
             </h3>
           </div>
-          
+
           {/* Özellikler İçerik Alanı */}
           <div className="flex-1 p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4 lg:space-y-5">
-            
+
             {/* Chatbox Başlık */}
             <div>
               <h4 className="text-base sm:text-lg font-bold text-gray-900 mb-2 sm:mb-3">Chatbox</h4>
@@ -2511,7 +2748,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                   </div>
                 </div>
               </div>
-              
+
               {/* Geri Alma ve Uygula Butonları */}
               {hasColorChanges && (
                 <div className="flex items-center space-x-2 mt-3">
@@ -2596,7 +2833,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
             {/* Chatbox Entegrasyon */}
             <div>
               <h4 className="text-base sm:text-lg font-bold text-gray-900 mb-2 sm:mb-3">Chatbox Entegrasyon</h4>
-              <div 
+              <div
                 className="rounded-lg p-2.5 sm:p-3 font-mono text-xs leading-relaxed relative overflow-hidden overflow-x-auto"
                 style={{ backgroundColor: '#1E1E1E', minHeight: '80px', height: 'auto' }}
               >

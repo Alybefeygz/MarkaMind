@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react'
 import { SketchPicker } from 'react-color'
 import ChatboxElements from './ChatboxElements'
 
-export default function ChatboxCreate({ themeColors, storeList, onBack, onSave }) {
+export default function ChatboxCreate({ themeColors, storeList, onBack, onSave }: { themeColors: unknown, storeList: unknown, onBack: () => void, onSave: (data: unknown) => void }) {
   // Yeni chatbox state'i
   const [newChatbox, setNewChatbox] = useState({
     name: '',
