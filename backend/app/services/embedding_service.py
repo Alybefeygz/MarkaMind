@@ -10,6 +10,8 @@ import re
 from datetime import datetime
 import time
 
+from app.services.ai_usage_log_service import ai_usage_log_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -158,28 +160,41 @@ class EmbeddingService:
             logger.error(f"Failed to find similar content: {str(e)}")
             return []
     
-    async def generate_ai_response(self, user_message: str, context: List[Dict[str, Any]], chatbot_config: Dict[str, Any]) -> str:
+    async def generate_ai_response(
+        self,
+        user_message: str,
+        context: List[Dict[str, Any]],
+        chatbot_config: Dict[str, Any],
+        conversation_id: Optional[str] = None,
+        chatbot_id: Optional[str] = None
+    ) -> str:
         """
         Generate AI response using OpenRouter API
-        
+
         Args:
             user_message: User's message
             context: Similar content for context
             chatbot_config: Chatbot configuration
-            
+            conversation_id: Conversation ID (for logging)
+            chatbot_id: Chatbot ID (for logging)
+
         Returns:
             AI-generated response
-            
+
         Raises:
             ValueError: If message is empty
             Exception: If API call fails
         """
+        start_time = datetime.utcnow()
+        system_prompt = None
+        ai_response = None
+
         try:
             if not user_message or not user_message.strip():
                 raise ValueError("User message cannot be empty")
-            
+
             logger.info(f"Generating AI response for message: {user_message[:50]}...")
-            
+
             # Rate limiting check
             await self._check_rate_limit()
             
@@ -193,13 +208,15 @@ class EmbeddingService:
             # Create system prompt
             chatbot_name = chatbot_config.get("name", "Assistant")
             brand_name = chatbot_config.get("brand", {}).get("name", "Company")
-            
-            system_prompt = f"""You are {chatbot_name}, a helpful AI assistant for {brand_name}. 
+
+            system_prompt = f"""You are {chatbot_name}, a helpful AI assistant for {brand_name}.
             Respond in a friendly, professional manner. If you don't know something, say so honestly.
             Keep responses concise and helpful.{context_text}"""
-            
+
             # Generate response using OpenRouter
             async with httpx.AsyncClient(timeout=60.0) as client:
+                api_start_time = datetime.utcnow()
+
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={
@@ -217,16 +234,63 @@ class EmbeddingService:
                         "stream": False
                     }
                 )
-                
+
+                api_end_time = datetime.utcnow()
+                latency_ms = int((api_end_time - api_start_time).total_seconds() * 1000)
+
                 if response.status_code != 200:
                     error_msg = f"AI API error: {response.status_code} - {response.text}"
                     logger.error(error_msg)
+
+                    # ❌ Başarısız chat isteğini logla
+                    await ai_usage_log_service.log_ai_request(
+                        usage_type="chat_response",
+                        model_name=self.default_model,
+                        input_text=f"System: {system_prompt}\nUser: {user_message}",
+                        output_text=None,
+                        latency_ms=latency_ms,
+                        status="failed",
+                        conversation_id=conversation_id,
+                        chatbot_id=chatbot_id,
+                        error_message=f"API error: {response.status_code}",
+                        metadata={
+                            "temperature": self.temperature,
+                            "max_tokens": min(self.max_tokens, 1000)
+                        }
+                    )
+
                     # Fallback response
                     return f"I'm sorry, I'm having trouble processing your request right now. Please try again later."
-                
+
                 result = response.json()
                 ai_response = result["choices"][0]["message"]["content"].strip()
-                
+
+                # Token bilgilerini çek (OpenRouter format)
+                usage_data = result.get("usage", {})
+                input_tokens = usage_data.get("prompt_tokens", 0)
+                output_tokens = usage_data.get("completion_tokens", 0)
+                total_tokens = usage_data.get("total_tokens", 0)
+
+                # ✅ Başarılı chat isteğini logla (token bilgileriyle)
+                await ai_usage_log_service.log_ai_request(
+                    usage_type="chat_response",
+                    model_name=self.default_model,
+                    input_text=f"System: {system_prompt[:500]}\nUser: {user_message}",
+                    output_text=ai_response[:2000],
+                    latency_ms=latency_ms,
+                    status="success",
+                    conversation_id=conversation_id,
+                    chatbot_id=chatbot_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    metadata={
+                        "temperature": self.temperature,
+                        "max_tokens": min(self.max_tokens, 1000),
+                        "context_items": len(context)
+                    }
+                )
+
                 logger.info("AI response generated successfully")
                 return ai_response
                 
@@ -234,6 +298,24 @@ class EmbeddingService:
             raise
         except Exception as e:
             logger.error(f"Failed to generate AI response: {str(e)}")
+
+            # Genel hataları logla
+            end_time = datetime.utcnow()
+            latency_ms = int((end_time - start_time).total_seconds() * 1000)
+
+            await ai_usage_log_service.log_ai_request(
+                usage_type="chat_response",
+                model_name=self.default_model,
+                input_text=f"System: {system_prompt or 'N/A'}\nUser: {user_message}",
+                output_text=ai_response,
+                latency_ms=latency_ms,
+                status="failed",
+                conversation_id=conversation_id,
+                chatbot_id=chatbot_id,
+                error_message=str(e)[:500],
+                metadata={"error_type": "general_error"}
+            )
+
             # Return fallback response instead of raising
             return f"Hello! I'm {chatbot_config.get('name', 'your assistant')}. How can I help you today?"
     
@@ -543,3 +625,7 @@ class EmbeddingService:
                 "pending_entries": 0,
                 "error": str(e)
             }
+
+
+# Singleton instance
+embedding_service = EmbeddingService()

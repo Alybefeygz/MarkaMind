@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from typing import List, Optional
 from uuid import UUID
+import logging
 
 from ..schemas.knowledge import KnowledgeResponse, KnowledgeUpdate, KnowledgeList, KnowledgeStats
 from ..schemas.common import StatusResponse, PaginationParams, PaginationResponse
 from ..models.knowledge import KnowledgeBaseEntryCreate
 from ..dependencies import get_current_user, get_supabase_client
+from .knowledge_auto_process import auto_process_pdf_chunks_and_enrich
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/knowledge",
@@ -17,41 +21,81 @@ router = APIRouter(
 @router.post("/", response_model=KnowledgeResponse, status_code=status.HTTP_201_CREATED)
 async def create_knowledge_entry(
     knowledge: KnowledgeBaseEntryCreate,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     supabase = Depends(get_supabase_client)
 ):
     """
     Create a new knowledge base entry for a chatbot
+
+    **Otomatik İşleme:**
+    - PDF yüklendikten sonra otomatik olarak chunking ve AI enrichment başlar
+    - İşlem arka planda asenkron çalışır
+    - Tüm AI istekleri ai_usage_logs tablosuna kaydedilir
     """
     try:
         # Verify chatbot belongs to user (through brand ownership)
         chatbot_result = supabase.table("chatbots").select(
             "id, brands!inner(user_id)"
         ).eq("id", str(knowledge.chatbot_id)).eq("brands.user_id", current_user["id"]).execute()
-        
+
         if not chatbot_result.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Chatbot not found or not owned by user"
             )
-        
+
         # Prepare knowledge data
         knowledge_data = knowledge.model_dump()
-        
+
+        # 🔒 GÜVENLİK: Frontend'den gelen status'u IGNORE et, her zaman 'pending' ile başla
+        # Bu sayede otomatik işleme garantili olarak tetiklenir
+        knowledge_data['status'] = 'pending'
+
         # Create knowledge entry in database
         result = supabase.table("knowledge_base_entries").insert(knowledge_data).execute()
-        
+
         if not result.data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to create knowledge entry"
             )
-        
-        return KnowledgeResponse(**result.data[0])
-        
+
+        created_entry = result.data[0]
+        knowledge_entry_id = created_entry['id']
+
+        # 🚀 OTOMATIK İŞLEME: Chunking + AI Enrichment başlat
+        # Eğer content varsa (PDF text extract edilmişse), otomatik işleme başlat
+        if created_entry.get('content'):
+            logger.info(f"🚀 Auto-triggering chunking + AI enrichment for knowledge entry {knowledge_entry_id}")
+
+            # Status'u processing yap
+            supabase.table("knowledge_base_entries").update({
+                "status": "processing"
+            }).eq("id", knowledge_entry_id).execute()
+
+            # Background task başlat
+            background_tasks.add_task(
+                auto_process_pdf_chunks_and_enrich,
+                knowledge_entry_id=knowledge_entry_id,
+                chatbot_id=str(knowledge.chatbot_id),
+                user_id=current_user["id"],
+                supabase=supabase
+            )
+
+            # Response'da status'u processing olarak göster
+            created_entry['status'] = 'processing'
+
+            logger.info(f"✅ Auto-processing queued for {knowledge_entry_id}")
+        else:
+            logger.warning(f"⚠️ No content in knowledge entry {knowledge_entry_id}, skipping auto-processing")
+
+        return KnowledgeResponse(**created_entry)
+
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Failed to create knowledge entry: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create knowledge entry: {str(e)}"

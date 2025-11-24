@@ -55,10 +55,12 @@ class Settings(BaseSettings):
         "http://localhost:3001",
     ]
 
-    # OpenRouter (AI)
-    OPENROUTER_API_KEY: Optional[str] = None
-    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    DEFAULT_MODEL: str = "meta-llama/llama-3.1-8b-instruct:free"
+    # Gemini AI Configuration
+    GEMINI_API_KEY: str
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    EMBEDDING_MODEL: str = "text-embedding-004"
+    TEMPERATURE: float = 0.7
+    MAX_TOKENS: int = 8000
 
     # Storage Configuration
     BRAND_LOGO_BUCKET: str = "brand-logos"

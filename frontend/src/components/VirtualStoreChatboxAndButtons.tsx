@@ -1,11 +1,14 @@
 'use client'
 
 import { MessageSquare, Send } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { sendChatMessage } from '@/lib/api'
 
 interface VirtualStoreChatboxAndButtonsProps {
   chatboxTitle?: string
   initialMessage?: string
+  chatbotId?: string  // ✅ Yeni: Chatbot ID
+  userId?: string  // ✅ Yeni: User ID (opsiyonel, anonim kullanıcılar için)
   colors?: {
     primary?: string
     aiMessage?: string
@@ -24,15 +27,18 @@ interface VirtualStoreChatboxAndButtonsProps {
 }
 
 interface Message {
-  id: number
+  id: string
   text: string
   sender: 'user' | 'bot'
   timestamp: Date
+  messageId?: string  // ✅ Yeni: Backend'den gelen message ID
 }
 
 export default function VirtualStoreChatboxAndButtons({
   chatboxTitle = 'Zzen Chatbox',
   initialMessage = "Hello! It's Orbina here!",
+  chatbotId,  // ✅ Yeni
+  userId,  // ✅ Yeni
   colors = {
     primary: '#7B4DFA',
     aiMessage: '#E5E7EB',
@@ -43,7 +49,7 @@ export default function VirtualStoreChatboxAndButtons({
     buttonPrimary: '#7B4DFA',
     buttonIcon: '#FFFFFF'
   },
-  isVisible = true,
+  isVisible = false,
   onToggle,
   className = '',
   style = {},
@@ -51,30 +57,103 @@ export default function VirtualStoreChatboxAndButtons({
 }: VirtualStoreChatboxAndButtonsProps) {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: initialMessage, sender: 'bot', timestamp: new Date() }
+    { id: '1', text: initialMessage, sender: 'bot', timestamp: new Date() }
   ])
+  const [isLoading, setIsLoading] = useState(false)  // ✅ Yeni: Loading state
 
-  const handleSendMessage = () => {
-    if (message.trim()) {
-      const userMessage: Message = {
-        id: messages.length + 1,
-        text: message.trim(),
-        sender: 'user',
+  // ✅ Yeni: Session ID yönetimi
+  const [sessionId] = useState(() => {
+    if (typeof window === 'undefined') return ''
+
+    const stored = localStorage.getItem('chat_session_id')
+    if (stored) return stored
+
+    const newId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
+    localStorage.setItem('chat_session_id', newId)
+    return newId
+  })
+
+  // initialMessage prop'u değiştiğinde ilk mesajı güncelle
+  useEffect(() => {
+    setMessages(prevMessages => {
+      // Sadece ilk mesajı (bot mesajını) güncelle, kullanıcı mesajlarını koru
+      const updatedMessages = [...prevMessages]
+      if (updatedMessages.length > 0 && updatedMessages[0].sender === 'bot') {
+        updatedMessages[0] = {
+          ...updatedMessages[0],
+          text: initialMessage
+        }
+      }
+      return updatedMessages
+    })
+  }, [initialMessage])
+
+  // ✅ YENİ: Backend'e bağlı handleSendMessage
+  const handleSendMessage = async () => {
+    if (!message.trim() || isLoading) return
+
+    // Chatbot ID kontrolü
+    if (!chatbotId) {
+      console.error('Chatbot ID is required')
+      const errorMessage: Message = {
+        id: `error_${Date.now()}`,
+        text: "Chatbot yapılandırması bulunamadı. Lütfen sayfayı yenileyin.",
+        sender: 'bot',
         timestamp: new Date()
       }
+      setMessages(prev => [...prev, errorMessage])
+      return
+    }
 
-      setMessages(prev => [...prev, userMessage])
-      setMessage('')
+    const userMessageText = message.trim()
+    setMessage('')
+    setIsLoading(true)
 
-      setTimeout(() => {
-        const botMessage: Message = {
-          id: messages.length + 2,
-          text: "Mesajınız için teşekkürler! Bu bir demo chatbox'tır. Gerçek bir backend bağlantısı henüz mevcut değildir.",
-          sender: 'bot',
-          timestamp: new Date()
+    // Kullanıcı mesajını UI'a ekle
+    const userMessage: Message = {
+      id: `user_${Date.now()}`,
+      text: userMessageText,
+      sender: 'user',
+      timestamp: new Date()
+    }
+    setMessages(prev => [...prev, userMessage])
+
+    try {
+      // Backend'e mesaj gönder
+      const response = await sendChatMessage({
+        chatbot_id: chatbotId,
+        message: userMessageText,
+        session_id: sessionId,
+        user_id: userId,
+        metadata: {
+          device: typeof window !== 'undefined' ? (window.innerWidth < 768 ? 'mobile' : 'desktop') : 'unknown',
+          url: typeof window !== 'undefined' ? window.location.href : ''
         }
-        setMessages(prev => [...prev, botMessage])
-      }, 2000)
+      })
+
+      // Bot yanıtını UI'a ekle
+      const botMessage: Message = {
+        id: response.bot_message_id,
+        text: response.bot_response,
+        sender: 'bot',
+        timestamp: new Date(),
+        messageId: response.bot_message_id
+      }
+      setMessages(prev => [...prev, botMessage])
+
+    } catch (error) {
+      console.error('Failed to send message:', error)
+
+      // Hata mesajı göster
+      const errorMessage: Message = {
+        id: `error_${Date.now()}`,
+        text: "Üzgünüm, mesajınızı işlerken bir hata oluştu. Lütfen tekrar deneyin.",
+        sender: 'bot',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsLoading(false)
     }
   }
 

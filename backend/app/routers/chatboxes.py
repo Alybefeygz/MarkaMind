@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile, BackgroundTasks
 from typing import List, Optional, Dict, Any
 from uuid import UUID, uuid4
 from datetime import datetime
 import secrets
 import io
+import time
 from pypdf import PdfReader
 
 from ..schemas.chatbox import (
@@ -17,7 +18,13 @@ from ..schemas.chatbox import (
     ChatboxStats
 )
 from ..schemas.common import StatusResponse, PaginationParams, PaginationResponse
+from ..schemas.knowledge import (
+    ProcessChunksRequest, ProcessChunksResponse, ChunkResponse,
+    ChunkListItem, ChunkStatistics
+)
 from ..dependencies import get_current_user, get_supabase_client
+from ..services.chunking_service import chunking_service
+from ..services.chunk_enrichment_service import chunk_enrichment_service
 
 router = APIRouter(
     prefix="/chatboxes",
@@ -1018,15 +1025,16 @@ async def add_product_to_chatbox(
                 detail="Product not found or doesn't belong to the same brand"
             )
 
-        # Check if relation already exists
-        existing_check = supabase.table("chatbox_products").select("id").eq(
-            "chatbox_id", str(chatbox_id)
+        # Check if product is already used in ANY chatbox (global check)
+        global_check = supabase.table("chatbox_products").select(
+            "chatbox_id, chatbots!inner(name)"
         ).eq("product_id", str(relation.product_id)).execute()
 
-        if existing_check.data:
+        if global_check.data:
+            existing_chatbox_name = global_check.data[0]['chatbots']['name']
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Product is already added to this chatbox"
+                detail=f"Bu ürün zaten '{existing_chatbox_name}' chatbox'ında kullanılıyor"
             )
 
         # Create relation
@@ -1245,12 +1253,16 @@ async def bulk_add_store_products_to_chatbox(
                 message="No products found in this store"
             )
 
-        # Get existing relations
-        existing_result = supabase.table("chatbox_products").select("product_id").eq(
-            "chatbox_id", str(chatbox_id)
+        # Get ALL existing product relations (global check)
+        all_existing_result = supabase.table("chatbox_products").select(
+            "product_id, chatbox_id, chatbots!inner(name)"
         ).execute()
 
-        existing_product_ids = {item['product_id'] for item in existing_result.data} if existing_result.data else set()
+        # Create a map of product_id -> chatbox_name for products already in use
+        product_chatbox_map = {}
+        if all_existing_result.data:
+            for item in all_existing_result.data:
+                product_chatbox_map[item['product_id']] = item['chatbots']['name']
 
         success_count = 0
         failed_count = 0
@@ -1260,13 +1272,14 @@ async def bulk_add_store_products_to_chatbox(
         for product in products_result.data:
             product_id = product['id']
 
-            # Check if already exists
-            if product_id in existing_product_ids:
+            # Check if product is already used in ANY chatbox
+            if product_id in product_chatbox_map:
+                existing_chatbox = product_chatbox_map[product_id]
                 skipped_count += 1
                 results.append({
                     "product_id": product_id,
                     "success": False,
-                    "message": "Already added",
+                    "message": f"Ürün zaten '{existing_chatbox}' chatbox'ında kullanılıyor",
                     "skipped": True
                 })
                 continue
@@ -1325,9 +1338,154 @@ async def bulk_add_store_products_to_chatbox(
 # PHASE 4: KNOWLEDGE SOURCES (PDF)
 # ============================================================================
 
+@router.post("/temp-knowledge-sources", response_model=KnowledgeSourceResponse, status_code=status.HTTP_201_CREATED)
+async def upload_temp_knowledge_source(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Upload a temporary PDF knowledge source (without chatbox assignment)
+
+    - Used during chatbox creation flow
+    - PDF will be assigned to chatbox later
+    - chatbot_id will be NULL initially
+    """
+    try:
+        # Validate file type
+        if not file.content_type or 'pdf' not in file.content_type.lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only PDF files are supported"
+            )
+
+        # Read file content
+        file_content = await file.read()
+        file_size = len(file_content)
+
+        # Generate unique file name
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'pdf'
+        unique_filename = f"temp_{uuid4()}.{file_extension}"
+        storage_path = f"temp/{current_user['id']}/{unique_filename}"
+
+        # Upload to Supabase Storage
+        upload_result = supabase.storage.from_("chatbox-knowledge").upload(
+            storage_path,
+            file_content,
+            {
+                "content-type": file.content_type,
+                "upsert": "false"
+            }
+        )
+
+        # Extract text from PDF
+        try:
+            extracted_text = extract_text_from_pdf(file_content)
+            pdf_status = "processed"
+        except Exception as e:
+            extracted_text = None
+            pdf_status = "failed"
+            print(f"❌ PDF metin çıkarma hatası: {str(e)}")
+
+        # Create database record WITHOUT chatbot_id
+        knowledge_data = {
+            "chatbot_id": None,  # NULL - will be assigned later
+            "source_type": "pdf",
+            "source_name": file.filename,
+            "storage_path": storage_path,
+            "file_size": file_size,
+            "content": extracted_text,
+            "status": pdf_status,
+            "token_count": len(extracted_text) // 4 if extracted_text else 0,
+            "is_active": True
+        }
+
+        result = supabase.table("knowledge_base_entries").insert(knowledge_data).execute()
+
+        if not result.data:
+            # Clean up uploaded file if database insert fails
+            try:
+                supabase.storage.from_("chatbox-knowledge").remove([storage_path])
+            except:
+                pass
+
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create knowledge source record"
+            )
+
+        source_id = result.data[0]["id"]
+
+        # Automatically process chunks after upload
+        chunks_created = 0
+        try:
+            # Chunk the extracted text
+            chunks = chunking_service.chunk_text(
+                text=extracted_text if extracted_text else "",
+                source_name=file.filename
+            )
+
+            if chunks:
+                # Prepare chunk records
+                chunk_records = []
+                for chunk in chunks:
+                    chunk_records.append({
+                        "knowledge_entry_id": source_id,
+                        "chatbot_id": None,  # NULL - will be assigned later
+                        "chunk_index": chunk["chunk_index"],
+                        "content": chunk["content"],
+                        "token_count": chunk["token_count"],
+                        "metadata": chunk["metadata"]
+                    })
+
+                # Insert chunks
+                chunks_insert = supabase.table("knowledge_chunks").insert(chunk_records).execute()
+                chunks_created = len(chunks_insert.data) if chunks_insert.data else 0
+
+                print(f"✅ Created {chunks_created} chunks for temp knowledge source {source_id}")
+
+                # Start AI enrichment for temp PDF (without chatbox_id)
+                if chunks_created > 0:
+                    try:
+                        enrichment_job = await chunk_enrichment_service.create_enrichment_job(
+                            knowledge_entry_id=source_id,
+                            chatbot_id=None,  # NULL initially
+                            user_id=current_user["id"],
+                            prompt_template=None,
+                            ai_model=None
+                        )
+
+                        background_tasks.add_task(
+                            chunk_enrichment_service.enrich_all_chunks_background,
+                            job_id=enrichment_job['id'],
+                            knowledge_entry_id=source_id,
+                            prompt_template=None,
+                            ai_model=None
+                        )
+
+                        print(f"✅ Started AI enrichment job {enrichment_job['id']} for temp PDF")
+                    except Exception as enrichment_error:
+                        print(f"⚠️ Failed to start enrichment job: {str(enrichment_error)}")
+
+        except Exception as chunk_error:
+            print(f"⚠️ Failed to create chunks: {str(chunk_error)}")
+
+        return KnowledgeSourceResponse(**result.data[0])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload temp knowledge source: {str(e)}"
+        )
+
+
 @router.post("/{chatbox_id}/knowledge-sources", response_model=KnowledgeSourceResponse, status_code=status.HTTP_201_CREATED)
 async def upload_knowledge_source(
     chatbox_id: UUID,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
     supabase = Depends(get_supabase_client)
@@ -1406,13 +1564,65 @@ async def upload_knowledge_source(
                 detail="Failed to create knowledge source record"
             )
 
-        # TODO: Trigger vector embedding process here
-        # This would typically involve:
-        # 1. Extract text from PDF
-        # 2. Chunk the text
-        # 3. Generate embeddings using OpenAI/OpenRouter
-        # 4. Store embeddings in vector database
-        # 5. Update status to 'completed' and token_count
+        # Automatically process chunks after upload
+        source_id = result.data[0]["id"]
+        chunks_created = 0
+
+        try:
+            # Chunk the extracted text
+            chunks = chunking_service.chunk_text(
+                text=extracted_text if extracted_text else "",
+                source_name=file.filename
+            )
+
+            if chunks:
+                # Prepare chunk records
+                chunk_records = []
+                for chunk in chunks:
+                    chunk_records.append({
+                        "knowledge_entry_id": source_id,
+                        "chatbot_id": str(chatbox_id),
+                        "chunk_index": chunk["chunk_index"],
+                        "content": chunk["content"],
+                        "token_count": chunk["token_count"],
+                        "metadata": chunk["metadata"]
+                    })
+
+                # Insert chunks
+                chunks_insert = supabase.table("knowledge_chunks").insert(chunk_records).execute()
+                chunks_created = len(chunks_insert.data) if chunks_insert.data else 0
+
+                print(f"✅ Created {chunks_created} chunks for knowledge source {source_id}")
+
+                # Automatically start AI enrichment job after chunks are created
+                if chunks_created > 0:
+                    try:
+                        enrichment_job = await chunk_enrichment_service.create_enrichment_job(
+                            knowledge_entry_id=source_id,
+                            chatbot_id=str(chatbox_id),
+                            user_id=current_user["id"],
+                            prompt_template=None,  # Use default prompt
+                            ai_model=None  # Use default model
+                        )
+
+                        # Start background enrichment task with AI logging parameters
+                        background_tasks.add_task(
+                            chunk_enrichment_service.enrich_all_chunks_background,
+                            job_id=enrichment_job['id'],
+                            knowledge_entry_id=source_id,
+                            prompt_template=None,
+                            ai_model=None,
+                            chatbot_id=str(chatbox_id),  # ✅ AI loglama için eklendi
+                            user_id=current_user["id"]   # ✅ AI loglama için eklendi
+                        )
+
+                        print(f"✅ Started AI enrichment job {enrichment_job['id']} for {chunks_created} chunks")
+                    except Exception as enrichment_error:
+                        # Don't fail the upload if enrichment fails, just log it
+                        print(f"⚠️ Failed to start enrichment job: {str(enrichment_error)}")
+        except Exception as chunk_error:
+            # Don't fail the upload if chunking fails, just log it
+            print(f"⚠️ Failed to create chunks: {str(chunk_error)}")
 
         return KnowledgeSourceResponse(**result.data[0])
 
@@ -1686,6 +1896,7 @@ async def delete_knowledge_source(
 async def create_edited_pdf(
     chatbox_id: UUID,
     request: CreateEditedPDFRequest,
+    background_tasks: BackgroundTasks,  # ✅ Eklendi: Otomatik chunking ve enrichment için
     current_user: dict = Depends(get_current_user),
     supabase = Depends(get_supabase_client)
 ):
@@ -1696,6 +1907,7 @@ async def create_edited_pdf(
     - Creates new PDF record with edited content
     - New PDF name: [original_name]-Düzenlenmiş.pdf
     - New PDF is active by default
+    - **Otomatik chunking ve AI enrichment** başlatır
     """
     try:
         # Verify chatbox ownership
@@ -1764,14 +1976,14 @@ async def create_edited_pdf(
                 detail=f"Failed to upload PDF to storage: {str(e)}"
             )
 
-        # Create new PDF record
+        # Create new PDF record with 'pending' status for auto-processing
         new_source_data = {
             "chatbot_id": chatbox_id_str,
             "source_type": "pdf",
             "source_name": edited_name,
             "content": request.edited_content,
             "token_count": len(request.edited_content) // 4,  # Approximate token count
-            "status": "processed",
+            "status": "pending",  # ✅ Değişti: Otomatik işleme için 'pending' olarak başla
             "is_active": True,
             "storage_path": storage_path,  # New storage path
             "file_size": pdf_size,  # New file size
@@ -1793,12 +2005,85 @@ async def create_edited_pdf(
                 detail="Failed to create edited PDF record"
             )
 
+        created_entry = result.data[0]
+        source_id = created_entry["id"]
+
         print(f"✅ [create_edited_pdf] Düzenlenmiş PDF oluşturuldu: {edited_name}")
         print(f"   - Orijinal PDF ({original_name}) pasif yapıldı")
         print(f"   - Yeni PDF aktif: {edited_name}")
         print(f"   - Storage path: {storage_path}")
 
-        return KnowledgeSourceResponse(**result.data[0])
+        # 🚀 OTOMATIK İŞLEME: Chunking ve AI Enrichment başlat
+        try:
+            # Status'u processing yap
+            supabase.table("knowledge_base_entries").update({
+                "status": "processing"
+            }).eq("id", source_id).execute()
+
+            # Chunk'lara ayır
+            chunks = chunking_service.chunk_text(
+                text=request.edited_content,
+                source_name=edited_name
+            )
+
+            if chunks:
+                # Chunk kayıtları oluştur
+                chunk_records = []
+                for chunk in chunks:
+                    chunk_records.append({
+                        "knowledge_entry_id": source_id,
+                        "chatbot_id": chatbox_id_str,
+                        "chunk_index": chunk["chunk_index"],
+                        "content": chunk["content"],
+                        "token_count": chunk["token_count"],
+                        "metadata": chunk["metadata"]
+                    })
+
+                # Chunk'ları kaydet
+                chunks_insert = supabase.table("knowledge_chunks").insert(chunk_records).execute()
+                chunks_created = len(chunks_insert.data) if chunks_insert.data else 0
+
+                print(f"✅ [create_edited_pdf] {chunks_created} chunk oluşturuldu")
+
+                # AI enrichment job başlat
+                if chunks_created > 0:
+                    enrichment_job = await chunk_enrichment_service.create_enrichment_job(
+                        knowledge_entry_id=source_id,
+                        chatbot_id=chatbox_id_str,
+                        user_id=current_user["id"],
+                        prompt_template=None,
+                        ai_model=None
+                    )
+
+                    # Background enrichment task (AI loglama ile)
+                    background_tasks.add_task(
+                        chunk_enrichment_service.enrich_all_chunks_background,
+                        job_id=enrichment_job['id'],
+                        knowledge_entry_id=source_id,
+                        prompt_template=None,
+                        ai_model=None,
+                        chatbot_id=chatbox_id_str,
+                        user_id=current_user["id"]
+                    )
+
+                    print(f"✅ [create_edited_pdf] AI enrichment job {enrichment_job['id']} başlatıldı")
+
+                # Status'u processed yap
+                supabase.table("knowledge_base_entries").update({
+                    "status": "processed"
+                }).eq("id", source_id).execute()
+
+                created_entry["status"] = "processed"
+
+        except Exception as process_error:
+            print(f"⚠️ [create_edited_pdf] Otomatik işleme hatası: {str(process_error)}")
+            # Hata olsa bile PDF oluşturuldu, sadece işleme başarısız
+            supabase.table("knowledge_base_entries").update({
+                "status": "failed",
+                "error_message": f"Auto-processing failed: {str(process_error)}"
+            }).eq("id", source_id).execute()
+
+        return KnowledgeSourceResponse(**created_entry)
 
     except HTTPException:
         raise
@@ -1969,9 +2254,9 @@ async def get_all_chatbox_integrations(
                 .eq("is_active", True)\
                 .execute()
 
-            # Get product integrations (with store_id to check stores_only)
+            # Get product integrations
             products_result = supabase.table("chatbox_products")\
-                .select("product_id, products!inner(store_id)")\
+                .select("product_id")\
                 .eq("chatbox_id", chatbox_id)\
                 .eq("is_active", True)\
                 .execute()
@@ -1979,22 +2264,14 @@ async def get_all_chatbox_integrations(
             stores = [rel["store_id"] for rel in stores_result.data]
             stores_only = [rel["store_id"] for rel in stores_result.data if not rel["show_on_products"]]
 
-            # Sadece çakışma yaratan ürünleri ekle
-            # Eğer ürünün mağazası "stores_only" ise, o ürün çakışma yaratmaz
-            products_to_conflict = []
-            for rel in products_result.data:
-                product_id = rel["product_id"]
-                # Ürünün mağaza ID'sini al
-                store_id = rel["products"]["store_id"] if rel.get("products") else None
-
-                # Eğer bu ürünün mağazası "stores_only" DEĞİLSE, çakışma yarat
-                if store_id and store_id not in stores_only:
-                    products_to_conflict.append(product_id)
+            # UNIQUE constraint ile artık her ürün sadece bir chatbox'ta olabilir
+            # Bu yüzden TÜM ürünleri döndürüyoruz (filtreleme yok)
+            products = [rel["product_id"] for rel in products_result.data]
 
             integrations[chatbox_id] = {
                 "chatbox_name": chatbox["name"],
                 "stores": stores,
-                "products": products_to_conflict,  # Sadece çakışma yaratan ürünler
+                "products": products,  # TÜM ürünler (UNIQUE constraint sayesinde zaten tek chatbox'ta)
                 "stores_only": stores_only
             }
 
@@ -2089,16 +2366,38 @@ async def update_chatbox_integrations(
         # 4. Create new product integrations
         products_added = 0
         if integrations.products:
+            # Get all products that are used in OTHER chatboxes (not this one)
+            other_chatbox_products = supabase.table("chatbox_products").select(
+                "product_id, chatbox_id, chatbots!inner(name)"
+            ).execute()
+
+            # Create a map of product_id -> chatbox_name for products in OTHER chatboxes
+            other_products_map = {}
+            if other_chatbox_products.data:
+                for item in other_chatbox_products.data:
+                    # Since we deleted this chatbox's products, all remaining are from other chatboxes
+                    other_products_map[item['product_id']] = item['chatbots']['name']
+
             product_records = []
             for product_integration in integrations.products:
+                product_id_str = str(product_integration.product_id)
+
+                # Check if product is used in another chatbox
+                if product_id_str in other_products_map:
+                    existing_chatbox = other_products_map[product_id_str]
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Ürün '{product_id_str}' zaten '{existing_chatbox}' chatbox'ında kullanılıyor"
+                    )
+
                 product_records.append({
                     "chatbox_id": str(chatbox_id),
-                    "product_id": str(product_integration.product_id),
+                    "product_id": product_id_str,
                     "show_on_product_page": product_integration.show_on_product_page,  # Frontend'den gelen değer
                     "show_on_store_homepage": product_integration.show_on_store_homepage,  # Frontend'den gelen değer (yeni sistemde False)
                     "is_active": product_integration.is_active
                 })
-            
+
             if product_records:
                 result = supabase.table("chatbox_products")\
                     .insert(product_records)\
@@ -2126,4 +2425,490 @@ async def update_chatbox_integrations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update integrations: {str(e)}"
+        )
+
+
+# ============================================================================
+# KNOWLEDGE CHUNKS ENDPOINTS
+# ============================================================================
+
+@router.post("/{chatbox_id}/knowledge-sources/{source_id}/process-chunks", response_model=ProcessChunksResponse)
+async def process_knowledge_chunks(
+    chatbox_id: UUID,
+    source_id: UUID,
+    request: ProcessChunksRequest = ProcessChunksRequest(),
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Process PDF text into chunks and store in knowledge_chunks table
+
+    - Splits text into semantic chunks with overlap
+    - Stores chunks with metadata
+    - Returns statistics about chunking process
+    """
+    start_time = time.time()
+
+    try:
+        # 1. Verify chatbox ownership
+        await verify_chatbox_ownership(str(chatbox_id), current_user, supabase)
+
+        # 2. Get knowledge source
+        source_result = supabase.table("knowledge_base_entries").select(
+            "id, source_name, content, status"
+        ).eq("id", str(source_id)).eq("chatbot_id", str(chatbox_id)).execute()
+
+        if not source_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge source not found"
+            )
+
+        source = source_result.data[0]
+
+        # 3. Validate content exists
+        if not source.get("content"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Knowledge source has no content. Please upload and process the PDF first."
+            )
+
+        # 4. Check if chunks already exist
+        existing_chunks = supabase.table("knowledge_chunks").select(
+            "id", count="exact"
+        ).eq("knowledge_entry_id", str(source_id)).execute()
+
+        if existing_chunks.count and existing_chunks.count > 0 and not request.force_reprocess:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Chunks already exist for this source ({existing_chunks.count} chunks). Use force_reprocess=true to recreate."
+            )
+
+        # 5. Delete existing chunks if force reprocess
+        if request.force_reprocess:
+            supabase.table("knowledge_chunks").delete().eq(
+                "knowledge_entry_id", str(source_id)
+            ).execute()
+
+        # 6. Create chunking service with custom parameters
+        from ..services.chunking_service import ChunkingService
+        chunker = ChunkingService(
+            chunk_size=request.chunk_size,
+            chunk_overlap=request.chunk_overlap,
+            min_chunk_size=100
+        )
+
+        # 7. Chunk the text
+        chunks = chunker.chunk_text(
+            text=source["content"],
+            source_name=source.get("source_name", "")
+        )
+
+        if not chunks:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create chunks from content"
+            )
+
+        # 8. Prepare chunk records for database
+        chunk_records = []
+        for chunk in chunks:
+            chunk_records.append({
+                "knowledge_entry_id": str(source_id),
+                "chatbot_id": str(chatbox_id),
+                "chunk_index": chunk["chunk_index"],
+                "content": chunk["content"],
+                "token_count": chunk["token_count"],
+                "metadata": chunk["metadata"]
+            })
+
+        # 9. Batch insert chunks
+        insert_result = supabase.table("knowledge_chunks").insert(chunk_records).execute()
+
+        if not insert_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to insert chunks into database"
+            )
+
+        # 10. Calculate statistics
+        stats = chunker.get_chunk_statistics(chunks)
+
+        # 11. Create preview of first 3 chunks
+        chunks_preview = []
+        for chunk_data in insert_result.data[:3]:
+            content_preview = chunk_data["content"][:100] + "..." if len(chunk_data["content"]) > 100 else chunk_data["content"]
+            chunks_preview.append(ChunkListItem(
+                id=chunk_data["id"],
+                chunk_index=chunk_data["chunk_index"],
+                content_preview=content_preview,
+                token_count=chunk_data["token_count"],
+                metadata=chunk_data["metadata"]
+            ))
+
+        # 12. Calculate processing time
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        return ProcessChunksResponse(
+            success=True,
+            source_id=source_id,
+            chunks_created=stats["total_chunks"],
+            total_tokens=stats["total_tokens"],
+            average_chunk_size=stats["average_chunk_size"],
+            processing_time_ms=processing_time_ms,
+            chunks_preview=chunks_preview
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process chunks: {str(e)}"
+        )
+
+
+@router.get("/{chatbox_id}/knowledge-sources/{source_id}/chunks", response_model=List[ChunkResponse])
+async def get_knowledge_chunks(
+    chatbox_id: UUID,
+    source_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Get all chunks for a knowledge source
+    """
+    try:
+        # Verify ownership
+        await verify_chatbox_ownership(str(chatbox_id), current_user, supabase)
+
+        # Verify source exists and belongs to chatbox
+        source_result = supabase.table("knowledge_base_entries").select("id").eq(
+            "id", str(source_id)
+        ).eq("chatbot_id", str(chatbox_id)).execute()
+
+        if not source_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge source not found"
+            )
+
+        # Get chunks
+        chunks_result = supabase.table("knowledge_chunks").select("*").eq(
+            "knowledge_entry_id", str(source_id)
+        ).order("chunk_index", desc=False).execute()
+
+        if not chunks_result.data:
+            return []
+
+        return [ChunkResponse(**chunk) for chunk in chunks_result.data]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get chunks: {str(e)}"
+        )
+
+
+@router.get("/{chatbox_id}/knowledge-sources/{source_id}/chunks/stats", response_model=ChunkStatistics)
+async def get_chunks_statistics(
+    chatbox_id: UUID,
+    source_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Get statistics about chunks for a knowledge source
+    """
+    try:
+        # Verify ownership
+        await verify_chatbox_ownership(str(chatbox_id), current_user, supabase)
+
+        # Get chunks
+        chunks_result = supabase.table("knowledge_chunks").select(
+            "content, token_count"
+        ).eq("knowledge_entry_id", str(source_id)).execute()
+
+        if not chunks_result.data:
+            return ChunkStatistics(
+                total_chunks=0,
+                total_tokens=0,
+                average_chunk_size=0,
+                min_chunk_size=0,
+                max_chunk_size=0
+            )
+
+        # Calculate statistics
+        chunk_sizes = [len(chunk["content"]) for chunk in chunks_result.data]
+        total_tokens = sum(chunk["token_count"] for chunk in chunks_result.data)
+
+        return ChunkStatistics(
+            total_chunks=len(chunks_result.data),
+            total_tokens=total_tokens,
+            average_chunk_size=sum(chunk_sizes) // len(chunk_sizes) if chunk_sizes else 0,
+            min_chunk_size=min(chunk_sizes) if chunk_sizes else 0,
+            max_chunk_size=max(chunk_sizes) if chunk_sizes else 0
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get chunk statistics: {str(e)}"
+        )
+
+
+@router.delete("/{chatbox_id}/knowledge-sources/{source_id}/chunks", response_model=StatusResponse)
+async def delete_knowledge_chunks(
+    chatbox_id: UUID,
+    source_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Delete all chunks for a knowledge source
+    """
+    try:
+        # Verify ownership
+        await verify_chatbox_ownership(str(chatbox_id), current_user, supabase)
+
+        # Delete chunks
+        result = supabase.table("knowledge_chunks").delete().eq(
+            "knowledge_entry_id", str(source_id)
+        ).execute()
+
+        deleted_count = len(result.data) if result.data else 0
+
+        return StatusResponse(
+            success=True,
+            message=f"Successfully deleted {deleted_count} chunks"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete chunks: {str(e)}"
+        )
+
+
+@router.post("/migrate-chunks", response_model=Dict[str, Any])
+async def migrate_existing_pdfs_to_chunks(
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    ONE-TIME MIGRATION: Chunk all existing PDFs that don't have chunks yet
+
+    This endpoint processes all PDF knowledge sources that haven't been chunked
+    and creates chunks for them.
+    """
+    try:
+        start_time = time.time()
+
+        # Get all knowledge base entries for user's chatbots
+        entries_result = supabase.table("knowledge_base_entries").select(
+            "id, chatbot_id, source_name, content, chatbots!inner(brands!inner(user_id))"
+        ).eq("chatbots.brands.user_id", current_user["id"]).execute()
+
+        if not entries_result.data:
+            return {
+                "success": True,
+                "message": "No PDFs found",
+                "total_pdfs": 0,
+                "chunked": 0,
+                "already_chunked": 0,
+                "failed": 0
+            }
+
+        total_pdfs = len(entries_result.data)
+        already_chunked = 0
+        successfully_chunked = 0
+        failed = 0
+        total_chunks_created = 0
+
+        # Process each entry
+        for entry in entries_result.data:
+            source_id = entry["id"]
+            chatbot_id = entry["chatbot_id"]
+            source_name = entry.get("source_name", "unknown.pdf")
+            content = entry.get("content")
+
+            # Check if already chunked
+            existing = supabase.table("knowledge_chunks").select(
+                "id", count="exact"
+            ).eq("knowledge_entry_id", source_id).execute()
+
+            if existing.count and existing.count > 0:
+                already_chunked += 1
+                continue
+
+            # Skip if no content
+            if not content or len(content.strip()) < 100:
+                failed += 1
+                continue
+
+            try:
+                # Chunk the text
+                chunks = chunking_service.chunk_text(
+                    text=content,
+                    source_name=source_name
+                )
+
+                if not chunks:
+                    failed += 1
+                    continue
+
+                # Prepare chunk records
+                chunk_records = []
+                for chunk in chunks:
+                    chunk_records.append({
+                        "knowledge_entry_id": source_id,
+                        "chatbot_id": chatbot_id,
+                        "chunk_index": chunk["chunk_index"],
+                        "content": chunk["content"],
+                        "token_count": chunk["token_count"],
+                        "metadata": chunk["metadata"]
+                    })
+
+                # Insert chunks
+                insert_result = supabase.table("knowledge_chunks").insert(chunk_records).execute()
+
+                if insert_result.data:
+                    chunks_count = len(insert_result.data)
+                    total_chunks_created += chunks_count
+                    successfully_chunked += 1
+                else:
+                    failed += 1
+
+            except Exception:
+                failed += 1
+
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        return {
+            "success": True,
+            "message": f"Migration completed: {successfully_chunked} PDFs chunked",
+            "total_pdfs": total_pdfs,
+            "chunked": successfully_chunked,
+            "already_chunked": already_chunked,
+            "failed": failed,
+            "total_chunks_created": total_chunks_created,
+            "processing_time_ms": processing_time_ms
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to migrate PDFs: {str(e)}"
+        )
+
+
+@router.post("/{chatbox_id}/assign-pending-pdfs", response_model=StatusResponse)
+async def assign_pending_pdfs_to_chatbox(
+    chatbox_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
+):
+    """
+    Assign user's pending PDFs (chatbot_id = NULL) to a specific chatbox
+
+    - Used after chatbox creation to link uploaded PDFs
+    - Updates both knowledge_base_entries and knowledge_chunks
+    """
+    try:
+        print(f"🔍 Starting PDF assignment for chatbox {chatbox_id}")
+        
+        # Verify chatbox ownership
+        await verify_chatbox_ownership(str(chatbox_id), current_user, supabase)
+        print(f"✅ Chatbox ownership verified")
+
+        # Get all pending knowledge entries (chatbot_id = NULL) created recently
+        try:
+            pending_pdfs = supabase.table("knowledge_base_entries").select(
+                "id, source_name, created_at"
+            ).is_("chatbot_id", "null").order("created_at", desc=True).limit(10).execute()
+            print(f"📊 Found {len(pending_pdfs.data) if pending_pdfs.data else 0} pending PDFs")
+        except Exception as query_error:
+            print(f"❌ Query error: {str(query_error)}")
+            raise
+
+        if not pending_pdfs.data:
+            return StatusResponse(
+                success=True,
+                message="No pending PDFs found to assign"
+            )
+
+        # Filter by user: Check if PDFs were created in the last 5 minutes (reasonable timeframe)
+        from datetime import datetime, timedelta, timezone
+        recent_threshold = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+        pdf_ids = []
+        for pdf in pending_pdfs.data:
+            try:
+                created_at_str = pdf['created_at']
+                # Handle both formats: with Z or with +00:00
+                if created_at_str.endswith('Z'):
+                    created_at_str = created_at_str.replace('Z', '+00:00')
+                created_at = datetime.fromisoformat(created_at_str)
+                
+                if created_at > recent_threshold:
+                    pdf_ids.append(pdf['id'])
+                    print(f"✅ PDF {pdf['source_name']} is recent, adding to assignment list")
+            except Exception as parse_error:
+                print(f"⚠️ Failed to parse date for PDF {pdf.get('id')}: {str(parse_error)}")
+                continue
+
+        if not pdf_ids:
+            print(f"⚠️ No recent PDFs found (threshold: {recent_threshold})")
+            return StatusResponse(
+                success=True,
+                message="No recent pending PDFs found to assign"
+            )
+
+        print(f"📝 Assigning {len(pdf_ids)} PDFs to chatbox {chatbox_id}")
+
+        # Update knowledge_base_entries: Set chatbot_id
+        update_result = supabase.table("knowledge_base_entries").update({
+            "chatbot_id": str(chatbox_id)
+        }).in_("id", pdf_ids).execute()
+
+        updated_pdfs = len(update_result.data) if update_result.data else 0
+        print(f"✅ Updated {updated_pdfs} PDFs")
+
+        # Update knowledge_chunks: Set chatbot_id for chunks belonging to these PDFs
+        chunks_update = supabase.table("knowledge_chunks").update({
+            "chatbot_id": str(chatbox_id)
+        }).in_("knowledge_entry_id", pdf_ids).execute()
+
+        updated_chunks = len(chunks_update.data) if chunks_update.data else 0
+        print(f"✅ Updated {updated_chunks} chunks")
+
+        # Update enrichment jobs: Set chatbot_id
+        jobs_update = supabase.table("chunk_enrichment_jobs").update({
+            "chatbot_id": str(chatbox_id)
+        }).in_("knowledge_entry_id", pdf_ids).execute()
+
+        print(f"✅ Assigned {updated_pdfs} PDFs and {updated_chunks} chunks to chatbox {chatbox_id}")
+
+        return StatusResponse(
+            success=True,
+            message=f"Successfully assigned {updated_pdfs} PDFs ({updated_chunks} chunks) to chatbox"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR in assign_pending_pdfs: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to assign pending PDFs: {str(e)}"
         )

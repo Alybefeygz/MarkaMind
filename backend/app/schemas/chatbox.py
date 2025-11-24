@@ -248,7 +248,7 @@ class ChatboxIntegrationsResponse(BaseModel):
 class KnowledgeSourceResponse(BaseModel):
     """Knowledge source (PDF) response"""
     id: UUID
-    chatbot_id: UUID
+    chatbot_id: Optional[UUID]  # Can be null for temp uploads
     source_type: str
     source_name: str
     storage_path: str

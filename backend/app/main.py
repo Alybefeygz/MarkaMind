@@ -38,7 +38,7 @@ async def health():
     return {
         "status": "healthy",
         "supabase_configured": bool(settings.SUPABASE_URL),
-        "openrouter_configured": bool(settings.OPENROUTER_API_KEY),
+        "gemini_configured": bool(settings.GEMINI_API_KEY),
         "debug": settings.DEBUG
     }
 
@@ -50,6 +50,11 @@ from app.routers.brands import router as brands_router
 from app.routers.stores import router as stores_router
 from app.routers.products import router as products_router
 from app.routers.chatboxes import router as chatboxes_router
+from app.routers.gemini import router as gemini_router
+from app.routers.knowledge import router as knowledge_router
+from app.routers.chunk_enrichment import router as chunk_enrichment_router
+from app.routers.knowledge_auto_process import router as knowledge_auto_process_router
+from app.routers.chat import router as chat_router
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
@@ -57,10 +62,23 @@ app.include_router(brands_router, prefix="/api/v1")
 app.include_router(stores_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
 app.include_router(chatboxes_router, prefix="/api/v1")
+app.include_router(gemini_router, prefix="/api/v1")
+app.include_router(knowledge_router, prefix="/api/v1")
+app.include_router(chunk_enrichment_router, prefix="/api/v1")
+app.include_router(knowledge_auto_process_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1")
 
 # Additional routers (will be added in next steps)
 # app.include_router(chatbots_router, prefix="/api/v1")
 # app.include_router(widget_router, prefix="/api/v1")
+
+
+# Startup event - Gemini AI bağlantı testi
+@app.on_event("startup")
+async def startup_event():
+    """Backend başlangıcında otomatik çalışan event"""
+    from app.routers.gemini import startup_gemini_test
+    await startup_gemini_test()
 
 
 if __name__ == "__main__":

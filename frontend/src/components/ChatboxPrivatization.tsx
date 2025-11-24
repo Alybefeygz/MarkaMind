@@ -614,7 +614,7 @@ export default function ChatboxPrivatization({ selectedChatbox, themeColors, isC
           }}
         >
           {/* Özellikler Header */}
-          <div className="flex items-center p-3 sm:p-4 lg:p-6 xl:p-8 border-b border-gray-200">
+          <div className="flex items-center justify-between p-3 sm:p-4 lg:p-6 xl:p-8 border-b border-gray-200">
             <h3 className="text-lg sm:text-xl lg:text-2xl xl:text-3xl">
               <span
                 className="font-bold bg-gradient-to-r bg-clip-text text-transparent"
@@ -633,6 +633,64 @@ export default function ChatboxPrivatization({ selectedChatbox, themeColors, isC
                 Özelleştirme
               </span>
             </h3>
+            {/* ✅ Sıfırla Butonu - Sadece yeni chatbox oluşturma modunda */}
+            {isCreatingNew && (
+              <button
+                onClick={() => {
+                  // Tüm değerleri default/temel hale getir
+                  if (window.confirm('Tüm özelleştirme ayarları sıfırlanacak. Emin misiniz?')) {
+                    // Default değerleri al (page.tsx'teki getDefaultChatboxData fonksiyonuyla aynı)
+                    setChatboxData({
+                      name: '',
+                      chatbox_title: '',
+                      initial_message: '',
+                      placeholder_text: 'Mesajınızı yazın...',
+                      primary_color: themeColors.primary,
+                      ai_message_color: '#E5E7EB',
+                      user_message_color: themeColors.primary,
+                      ai_text_color: '#1F2937',
+                      user_text_color: '#FFFFFF',
+                      button_primary_color: themeColors.primary,
+                      button_border_color: '#FFB380',
+                      button_icon_color: '#FFFFFF',
+                      avatar_url: null,
+                      animation_style: 'fade',
+                      language: 'tr',
+                      status: 'draft'
+                    })
+                    // Temp state'leri de sıfırla
+                    setTempChatboxName('')
+                    setTempChatboxTitle('')
+                    setTempChatboxInitialMessage('')
+                    setTempColors({
+                      primary: themeColors.primary,
+                      aiMessage: '#E5E7EB',
+                      userMessage: themeColors.primary,
+                      borderColor: '#FFB380',
+                      aiTextColor: '#1F2937',
+                      userTextColor: '#FFFFFF',
+                      buttonPrimary: themeColors.primary,
+                      buttonBorderColor: '#FFB380',
+                      buttonIcon: '#FFFFFF'
+                    })
+                    // hasChanges'i false yap - değişiklik kalmadı
+                    setHasChanges(false)
+                    alert('Özelleştirme ayarları sıfırlandı!')
+                  }
+                }}
+                disabled={!hasChanges}
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium text-white transition-all duration-300 hover:scale-105 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                }}
+                title="Tüm ayarları sıfırla"
+              >
+                <svg className="w-3 sm:w-4 h-3 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="hidden sm:inline">Sıfırla</span>
+              </button>
+            )}
           </div>
           
           {/* Özellikler İçerik Alanı */}

@@ -62,3 +62,4 @@ tiktoken==0.5.1
 email-validator==2.1.0
 pypdf==4.0.1
 reportlab==4.0.7
+google-generativeai==0.3.2

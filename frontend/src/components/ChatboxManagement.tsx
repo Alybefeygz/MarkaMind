@@ -4,7 +4,7 @@ import { ChevronDown, Plus, MessageSquare, Settings, Trash2, Eye, ArrowLeft, Sen
 import { useState, useEffect, useRef, useMemo } from 'react'
 import ChatboxPrivatization from './ChatboxPrivatization'
 import ChatboxElements from './ChatboxElements'
-import { getChatboxKnowledgeSources, uploadKnowledgeSource, toggleKnowledgeSourceStatus, deleteKnowledgeSource, createEditedPDF, getChatboxStores, getChatboxProducts, getProductImages, createChatbox, getUserChatboxes, updateChatboxIntegrations, deleteChatbox, getAllChatboxIntegrations, type Store, type ProductListItem, type KnowledgeSourceResponse, type ChatboxStoreRelation, type ChatboxProductRelation, type ChatboxCreate, type ChatboxResponse } from '../lib/api'
+import { getChatboxKnowledgeSources, uploadKnowledgeSource, uploadTempKnowledgeSource, assignPendingPDFsToChatbox, toggleKnowledgeSourceStatus, deleteKnowledgeSource, createEditedPDF, getChatboxStores, getChatboxProducts, getProductImages, getUserChatboxes, updateChatboxIntegrations, deleteChatbox, getAllChatboxIntegrations, type Store, type ProductListItem, type KnowledgeSourceResponse, type ChatboxStoreRelation, type ChatboxProductRelation, type ChatboxCreate, type ChatboxResponse } from '../lib/api'
 import { useInventory } from '../context/InventoryContext'
 
 interface ThemeColors {
@@ -106,6 +106,11 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   // FIX: Chatbox değişimini takip etmek için önceki ID'yi tutuyoruz
   const [prevChatboxId, setPrevChatboxId] = useState<string | null>(null)
 
+  // Chatbox silme modal state'leri
+  const [showDeleteChatboxConfirm, setShowDeleteChatboxConfirm] = useState(false)
+  const [deletingChatboxId, setDeletingChatboxId] = useState<string | null>(null)
+  const [isDeletingChatbox, setIsDeletingChatbox] = useState(false)
+
   // Mağaza seçimi state'leri
   const [selectedStores, setSelectedStores] = useState<string[]>([])
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false)
@@ -169,6 +174,11 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     setSelectedProducts([])
     setOriginalStores([])
     setOriginalProducts([])
+    // ✅ FIX: PDF state'lerini de temizle - önceki chatbox'tan kalan PDFler görünmesin
+    setKnowledgeSources([])
+    setCurrentText('')
+    setOriginalText('')
+    setCreatedChatboxId(null) // Önceki created chatbox ID'sini temizle
     // ✅ FIX: Loading state'lerini de aktif et - flash of empty content önlenir
     setIsLoadingAllIntegrations(true)
     setIsLoadingChatboxIntegrations(true)
@@ -180,6 +190,11 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     setSelectedProducts([])
     setOriginalStores([])
     setOriginalProducts([])
+    // ✅ FIX: PDF state'lerini de temizle - önceki chatbox'tan kalan PDFler görünmesin
+    setKnowledgeSources([])
+    setCurrentText('')
+    setOriginalText('')
+    setCreatedChatboxId(null) // Önceki created chatbox ID'sini temizle
     // ✅ FIX: Loading state'lerini de aktif et
     setIsLoadingAllIntegrations(true)
     setIsLoadingChatboxIntegrations(true)
@@ -209,10 +224,13 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
   // PDF'leri backend'den yükle
   useEffect(() => {
     const loadKnowledgeSources = async () => {
-      if (activeTab === 'Veri Kaynakları' && selectedChatbox?.id && !isCreatingNew) {
+      // ✅ FIX: createdChatboxId'yi de kontrol et - yeni chatbox oluştururken PDF'ler yüklensin
+      const activeChatboxId = selectedChatbox?.id || createdChatboxId
+
+      if (activeTab === 'Veri Kaynakları' && activeChatboxId) {
         setIsLoadingPDFs(true)
         try {
-          const sources = await getChatboxKnowledgeSources(selectedChatbox.id)
+          const sources = await getChatboxKnowledgeSources(activeChatboxId)
           setKnowledgeSources(sources)
 
           // Aktif PDF'lerin içeriklerini textarea'ya formatla
@@ -232,7 +250,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
         } finally {
           setIsLoadingPDFs(false)
         }
-      } else if (isCreatingNew || !selectedChatbox?.id) {
+      } else if (!activeChatboxId) {
+        // Sadece chatbox ID yoksa temizle
         setKnowledgeSources([])
         setCurrentText('')
         setOriginalText('')
@@ -240,7 +259,17 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     }
 
     loadKnowledgeSources()
-  }, [activeTab, selectedChatbox?.id, createdChatboxId, isCreatingNew])
+  }, [activeTab, selectedChatbox?.id, createdChatboxId])
+
+  // DEBUG: Chatbox silme butonu durumunu izle
+  useEffect(() => {
+    console.log('🔍 [DEBUG] Buton state:', {
+      selectedChatbox: selectedChatbox?.id,
+      isDeletingChatbox,
+      isDisabled: !selectedChatbox || isDeletingChatbox,
+      showDeleteChatboxConfirm
+    })
+  }, [selectedChatbox, isDeletingChatbox, showDeleteChatboxConfirm])
 
   // Tüm chatbox entegrasyonlarını yükle (çakışma kontrolü için) - CACHE OPTİMİZE EDİLDİ
   useEffect(() => {
@@ -254,7 +283,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
           // ✅ OPTIMIZASYON: Cache kontrolü - 5 dakika geçerlilikte
           const CACHE_TTL = 5 * 60 * 1000 // 5 dakika
           const isCacheValid = integrationsCache.current.data &&
-                               (Date.now() - integrationsCache.current.timestamp) < CACHE_TTL
+            (Date.now() - integrationsCache.current.timestamp) < CACHE_TTL
 
           if (isCacheValid) {
             integrations = integrationsCache.current.data!
@@ -1002,6 +1031,89 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
     setHasIntegrationChanges(false)
   }
 
+  // Chatbox silme fonksiyonları
+  const handleDeleteChatboxClick = () => {
+    console.log('🔴 [DELETE] Chatbox Sil butonuna tıklandı')
+    console.log('🔴 [DELETE] selectedChatbox:', selectedChatbox)
+    console.log('🔴 [DELETE] activeTab:', activeTab)
+
+    if (!selectedChatbox) {
+      console.log('❌ [DELETE] selectedChatbox YOK - Modal açılmayacak')
+      return
+    }
+
+    console.log('✅ [DELETE] Modal açılıyor...')
+    setDeletingChatboxId(selectedChatbox.id)
+    setShowDeleteChatboxConfirm(true)
+    console.log('✅ [DELETE] showDeleteChatboxConfirm = true')
+  }
+
+  const handleCancelDeleteChatbox = () => {
+    setShowDeleteChatboxConfirm(false)
+    setDeletingChatboxId(null)
+  }
+
+  const handleConfirmDeleteChatbox = async () => {
+    if (!deletingChatboxId) return
+
+    setIsDeletingChatbox(true)
+
+    try {
+      // API çağrısı
+      await deleteChatbox(deletingChatboxId)
+
+      // Başarılı olursa:
+      // 1. Modal'ı kapat
+      setShowDeleteChatboxConfirm(false)
+      setDeletingChatboxId(null)
+
+      // 2. Seçili chatbox'ı temizle
+      setSelectedChatbox(null)
+
+      // 3. localStorage'dan silinen chatbox ID'sini temizle
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('selectedChatboxId')
+        localStorage.removeItem('lastSelectedChatbox')
+      }
+
+      // 4. Chatbox listesinden silinen chatbox dışında bir tane seç
+      const remainingChatboxes = chatboxList?.filter(cb => cb.id !== deletingChatboxId)
+
+      if (remainingChatboxes && remainingChatboxes.length > 0) {
+        // En son oluşturulan chatbox'ı seç (created_at'e göre sırala)
+        const sortedByDate = [...remainingChatboxes].sort((a, b) => {
+          const dateA = new Date(a.created_at).getTime()
+          const dateB = new Date(b.created_at).getTime()
+          return dateB - dateA // En yeni en üstte
+        })
+
+        const newestChatbox = sortedByDate[0]
+
+        // En yeni chatbox'ı seç
+        setSelectedChatbox(newestChatbox)
+
+        // localStorage'a kaydet
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('selectedChatboxId', newestChatbox.id)
+        }
+
+        console.log('✅ En son oluşturulan chatbox seçildi:', newestChatbox.name)
+        alert('✅ Chatbox başarıyla silindi!')
+      } else {
+        // Hiç chatbox kalmadıysa
+        alert('✅ Chatbox başarıyla silindi! Yeni bir chatbox oluşturabilirsiniz.')
+      }
+
+      // 5. Sayfayı yenile (chatbox listesi güncellensin)
+      window.location.reload()
+
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Chatbox silinirken bir hata oluştu')
+    } finally {
+      setIsDeletingChatbox(false)
+    }
+  }
+
   // Helper fonksiyon: Aktif chatbox ID'sini al
   const getActiveChatboxId = () => {
     return selectedChatbox?.id || createdChatboxId
@@ -1027,13 +1139,19 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
     setIsUploadingPDF(true)
     try {
-      let chatboxId = getActiveChatboxId()
+      let newSource: KnowledgeSourceResponse
 
-      // Eğer yeni chatbox oluşturuluyorsa ve henüz ID yoksa, önce chatbox'ı kaydet
-      if (isCreatingNew && !chatboxId) {
-        // Chatbox bilgilerini kontrol et
-        if (!chatboxData.name || !chatboxData.chatbox_title || !chatboxData.initial_message) {
-          alert('PDF yüklemeden önce lütfen Özelleştirme sekmesinde chatbox bilgilerini doldurun (İsim, Başlık, Başlangıç Mesajı)')
+      // Yeni chatbox oluşturma modundaysa, temp endpoint kullan (chatbox_id olmadan)
+      if (isCreatingNew) {
+        console.log('📤 Uploading temp PDF (without chatbox assignment)...')
+        newSource = await uploadTempKnowledgeSource(file)
+        console.log('✅ Temp PDF uploaded successfully:', newSource)
+      } else {
+        // Mevcut chatbox'a yükleme
+        const chatboxId = getActiveChatboxId()
+
+        if (!chatboxId) {
+          alert('Lütfen önce bir chatbox seçin.')
           setIsUploadingPDF(false)
           if (fileInputRef.current) {
             fileInputRef.current.value = ''
@@ -1041,46 +1159,9 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
           return
         }
 
-        // Chatbox'ı kaydet
-        const chatboxPayload: ChatboxCreate = {
-          name: chatboxData.name,
-          chatbox_title: chatboxData.chatbox_title,
-          initial_message: chatboxData.initial_message,
-          placeholder_text: chatboxData.placeholder_text,
-          primary_color: chatboxData.primary_color,
-          ai_message_color: chatboxData.ai_message_color,
-          user_message_color: chatboxData.user_message_color,
-          ai_text_color: chatboxData.ai_text_color,
-          user_text_color: chatboxData.user_text_color,
-          button_primary_color: chatboxData.button_primary_color,
-          button_border_color: chatboxData.button_border_color,
-          button_icon_color: chatboxData.button_icon_color,
-          avatar_url: chatboxData.avatar_url,
-          animation_style: chatboxData.animation_style,
-          language: chatboxData.language,
-          status: 'draft'
-        }
-
-        const createdChatbox = await createChatbox(chatboxPayload)
-        chatboxId = createdChatbox.id
-        setCreatedChatboxId(chatboxId) // ID'yi state'e kaydet
-
-        console.log('✅ Chatbox oluşturuldu, ID:', chatboxId)
-
-        // Kullanıcıya bildir - PDF yüklemeden önce
-        alert('Chatbox başarıyla oluşturuldu! PDF yüklemesi devam ediyor...')
+        console.log('📤 Uploading PDF to chatbox:', chatboxId)
+        newSource = await uploadKnowledgeSource(chatboxId, file)
       }
-
-      if (!chatboxId) {
-        alert('Chatbox ID bulunamadı. Lütfen önce chatbox\'ı kaydedin.')
-        setIsUploadingPDF(false)
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ''
-        }
-        return
-      }
-
-      const newSource = await uploadKnowledgeSource(chatboxId, file)
       console.log('✅ PDF başarıyla yüklendi:', newSource)
 
       // Listeyi güncelle
@@ -1573,10 +1654,49 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
         {/* İkinci Kutu - Veri Kaynağı Ayarları */}
         <div className="bg-white border-2 rounded-2xl flex flex-col flex-1 transition-all duration-700 ease-out translate-y-0 scale-100 min-h-[400px] lg:h-[850px]" style={{ borderColor: '#E5E7EB', animationDelay: '150ms' }}>
-          <div className="flex items-center p-4 sm:p-6 lg:p-8 border-b border-gray-200">
+          <div className="flex items-center justify-between p-4 sm:p-6 lg:p-8 border-b border-gray-200">
             <h3 className="text-xl sm:text-2xl lg:text-3xl text-gray-900">
               <span className="font-bold">Veri</span> <span className="font-normal">Kaynağı</span>
             </h3>
+            {/* ✅ Sıfırla Butonu - Sadece yeni chatbox oluştururken göster */}
+            {isCreatingNew && (
+              <button
+                onClick={async () => {
+                  if (window.confirm('Tüm PDF dosyalarını silmek istediğinize emin misiniz?')) {
+                    try {
+                      // Tüm PDFleri sil
+                      for (const source of knowledgeSources) {
+                        try {
+                          await deleteKnowledgeSource(getActiveChatboxId() || '', source.id)
+                        } catch (err) {
+                          console.error(`❌ Failed to delete ${source.source_name}:`, err)
+                        }
+                      }
+
+                      // Liste ve textarea'yı temizle
+                      setKnowledgeSources([])
+                      setCurrentText('')
+                      setOriginalText('')
+                      alert('Tüm PDFler başarıyla silindi!')
+                    } catch (error) {
+                      console.error('❌ PDFler silinirken hata:', error)
+                      alert('PDFler silinirken bir hata oluştu: ' + (error instanceof Error ? error.message : 'Bilinmeyen hata'))
+                    }
+                  }
+                }}
+                disabled={knowledgeSources.length === 0}
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium text-white transition-all duration-300 hover:scale-105 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                }}
+                title="Tüm PDF'leri sıfırla"
+              >
+                <svg className="w-3 sm:w-4 h-3 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="hidden sm:inline">Sıfırla</span>
+              </button>
+            )}
           </div>
           <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-4 lg:space-y-6 flex flex-col">
             {/* PDF Yükleme Alanı */}
@@ -1982,7 +2102,49 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
                 <span style={{ color: '#569CD6' }}>&lt;script</span> <span style={{ color: '#9CDCFE' }}>src</span><span style={{ color: '#D4D4D4' }}>=</span><span style={{ color: '#CE9178' }}>&quot;https://dashboard.markamind.ai/api/chatbot-widget&quot;</span><span style={{ color: '#569CD6' }}>&gt;&lt;/script&gt;</span>
               </div>
             </div>
-            <div className="mt-4 flex flex-col sm:flex-row justify-end gap-2">
+            <div className="mt-4 flex flex-col sm:flex-row sm:justify-between gap-2">
+              {/* Chatbox Silme Butonu */}
+              <button
+                onClick={(e) => {
+                  console.log('🟢 [BUTTON] onClick tetiklendi', e)
+                  handleDeleteChatboxClick()
+                }}
+                disabled={!selectedChatbox || isDeletingChatbox}
+                className="flex items-center justify-center space-x-2 px-3 sm:px-4 py-2 text-white rounded-lg font-medium transition-all duration-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: 'linear-gradient(135deg, #EF4444, #DC2626)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!e.currentTarget.disabled) {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px #EF444440';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-4 h-4"
+                >
+                  <path d="M3 6h18"></path>
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                </svg>
+                <span>Chatbox Sil</span>
+              </button>
+
+              {/* Panoya Kopyala Butonu */}
               <button
                 onClick={() => {
                   const codeText = `<script>
@@ -2620,6 +2782,77 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
             </div>
           </div>
         </div>
+
+        {/* Delete Chatbox Confirmation Modal - Entegrasyonlar sekmesinde */}
+        {(() => {
+          console.log('🔍 [MODAL-NEW] Modal render kontrolü:', {
+            showDeleteChatboxConfirm,
+            willRender: showDeleteChatboxConfirm,
+            themeColors
+          })
+          return null
+        })()}
+        {showDeleteChatboxConfirm && (() => {
+          console.log('✅ [MODAL] Modal RENDER EDİLİYOR!')
+          return (
+            <div
+              className="fixed bottom-6 right-6 z-50 bg-white border-2 rounded-2xl shadow-2xl p-6 max-w-sm w-full animate-slide-from-right"
+              style={{ borderColor: themeColors.primary }}
+              onClick={() => console.log('🎯 [MODAL] Modal tıklandı')}
+            >
+              <div className="flex flex-col space-y-4">
+                {/* Icon */}
+                <div className="flex justify-center">
+                  <div
+                    className="w-16 h-16 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: `${themeColors.primary}20` }}
+                  >
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: themeColors.primary }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Message */}
+                <div className="text-center">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Chatbox'ı Sil</h3>
+                  <p className="text-sm text-gray-600">
+                    Bu chatbox'ı silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve tüm ilişkili veriler (mağazalar, ürünler, sohbetler) silinecektir.
+                  </p>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleCancelDeleteChatbox}
+                    disabled={isDeletingChatbox}
+                    className="flex-1 px-4 py-2.5 text-sm text-gray-700 bg-gray-100 rounded-lg font-medium hover:bg-gray-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    onClick={handleConfirmDeleteChatbox}
+                    disabled={isDeletingChatbox}
+                    className="flex-1 px-4 py-2.5 text-sm text-white rounded-lg font-medium transition-all duration-300 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                    }}
+                  >
+                    {isDeletingChatbox ? (
+                      <div className="flex items-center justify-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Siliniyor...</span>
+                      </div>
+                    ) : (
+                      'Evet, Sil'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
       </div>
     )
   }
@@ -2857,6 +3090,7 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
         </div>
 
       </div>
+
     </div>
   )
 }

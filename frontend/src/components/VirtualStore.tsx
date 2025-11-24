@@ -2,6 +2,7 @@
 
 import { Store, MoreHorizontal, ArrowLeft, Star, Plus, X, Upload } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 import { SketchPicker } from 'react-color'
 import VirtualStoreChatboxAndButtons from './VirtualStoreChatboxAndButtons'
 import { createProduct, uploadProductImages, generateSlug, getProductReviews, getProductImages, getChatboxByStore, getChatboxByProduct, type ChatboxResponse } from '@/lib/api'
@@ -28,11 +29,11 @@ const platformColors = {
 // Örnek ürün verileri - Bu normalde props olarak gelir veya state'te tutulur
 export const productList = {
   1: [ // TechMall Store ürünleri
-    { 
-      id: 1, 
-      name: 'iPhone 15 Pro', 
-      price: '₺45.999', 
-      image: 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=300&h=300&fit=crop', 
+    {
+      id: 1,
+      name: 'iPhone 15 Pro',
+      price: '₺45.999',
+      image: 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=300&h=300&fit=crop',
       category: 'Telefon',
       description: 'iPhone 15 Pro, Titanium tasarımı ve A17 Pro çipi ile güçlü performans sunar. 48 MP ana kamera, Action Button ve USB-C bağlantısı ile teknolojinin zirvesinde.',
       rating: 4.8,
@@ -42,11 +43,11 @@ export const productList = {
         'https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?w=500&h=500&fit=crop'
       ]
     },
-    { 
-      id: 2, 
-      name: 'MacBook Air M2', 
-      price: '₺32.999', 
-      image: 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=300&h=300&fit=crop', 
+    {
+      id: 2,
+      name: 'MacBook Air M2',
+      price: '₺32.999',
+      image: 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=300&h=300&fit=crop',
       category: 'Laptop',
       description: 'M2 çipli MacBook Air, ince tasarımı ve güçlü performansı ile mükemmel taşınabilirlik sunar. 13.6 inç Liquid Retina ekran ve 18 saate kadar pil ömrü.',
       rating: 4.9,
@@ -56,11 +57,11 @@ export const productList = {
         'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=500&h=500&fit=crop'
       ]
     },
-    { 
-      id: 3, 
-      name: 'AirPods Pro', 
-      price: '₺8.999', 
-      image: 'https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?w=300&h=300&fit=crop', 
+    {
+      id: 3,
+      name: 'AirPods Pro',
+      price: '₺8.999',
+      image: 'https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?w=300&h=300&fit=crop',
       category: 'Aksesuar',
       description: 'AirPods Pro, aktif gürültü önleme teknolojisi ve şeffaflık modu ile üstün ses deneyimi sunar. Özel tasarım ve uzun pil ömrü.',
       rating: 4.7,
@@ -115,11 +116,14 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   // Use Inventory Context
   const { products: allProducts, fetchProducts } = useInventory()
 
+  // Pathname değişikliğini takip et
+  const pathname = usePathname()
+
   const [isVisible, setIsVisible] = useState(false)
   const [selectedStore, setSelectedStore] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
-  const [isChatboxVisible, setIsChatboxVisible] = useState(true)
+  const [isChatboxVisible, setIsChatboxVisible] = useState(false)
   const [productReviews, setProductReviews] = useState([])
   const [isLoadingReviews, setIsLoadingReviews] = useState(false)
 
@@ -193,6 +197,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   const brandDropdownRef = useRef(null) // Platform yerine Brand
   const storeDropdownRef = useRef(null)
   const productDropdownRef = useRef(null)
+
+  // Pathname değiştiğinde chatbox'ı kapat
+  useEffect(() => {
+    setIsChatboxVisible(false)
+  }, [pathname])
 
   // Sayfa yüklendiğinde animasyonu başlat
   useEffect(() => {
@@ -373,19 +382,19 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
       // Color picker click outside
       if (activeColorPicker) {
         let clickedInside = false
-        
+
         const activePickerRef = colorPickerRefs.current[activeColorPicker]
         if (activePickerRef && activePickerRef.contains(event.target)) {
           clickedInside = true
         }
-        
+
         const colorButtons = document.querySelectorAll('[data-color-button]')
         colorButtons.forEach(button => {
           if (button.contains(event.target)) {
             clickedInside = true
           }
         })
-        
+
         if (!clickedInside) {
           setActiveColorPicker(null)
         }
@@ -751,15 +760,15 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
       // 1. Slug oluştur (eğer name değiştiyse)
       const slug = newStore.name !== editingStore.name
         ? newStore.name
-            .toLowerCase()
-            .replace(/ğ/g, 'g')
-            .replace(/ü/g, 'u')
-            .replace(/ş/g, 's')
-            .replace(/ı/g, 'i')
-            .replace(/ö/g, 'o')
-            .replace(/ç/g, 'c')
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '')
+          .toLowerCase()
+          .replace(/ğ/g, 'g')
+          .replace(/ü/g, 'u')
+          .replace(/ş/g, 's')
+          .replace(/ı/g, 'i')
+          .replace(/ö/g, 'o')
+          .replace(/ç/g, 'c')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
         : editingStore.slug
 
       // 2. Store'u güncelle
@@ -996,11 +1005,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
     return (
       <div className="relative">
-        
+
         {/* Mağaza Banner */}
-        <div 
-          className="rounded-xl p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 mb-6 mx-3 sm:mx-6 lg:mx-12 xl:mx-20 mt-3 sm:mt-4 lg:mt-5" 
-          style={{ 
+        <div
+          className="rounded-xl p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 mb-6 mx-3 sm:mx-6 lg:mx-12 xl:mx-20 mt-3 sm:mt-4 lg:mt-5"
+          style={{
             background: `linear-gradient(135deg, ${selectedStore.primaryColor}, ${selectedStore.secondaryColor})`
           }}
         >
@@ -1013,11 +1022,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
               >
                 <ArrowLeft className="w-4 sm:w-5 h-4 sm:h-5 text-white/70" />
               </button>
-              
+
               {/* Mağaza Logo */}
               <div className="w-8 sm:w-10 lg:w-12 h-8 sm:h-10 lg:h-12 rounded-full flex items-center justify-center border border-white/30 overflow-hidden bg-white/20 backdrop-blur-sm">
-                <img 
-                  src={selectedStore.logo} 
+                <img
+                  src={selectedStore.logo}
                   alt={selectedStore.name}
                   className="w-full h-full object-cover"
                 />
@@ -1034,19 +1043,19 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
         {/* Ürün Detay İçeriği */}
         <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 lg:gap-8 mx-3 sm:mx-6 lg:mx-12 xl:mx-20">
-          
+
           {/* Sol Taraf - Ürün Görselleri */}
           <div className="lg:w-1/2">
             <div className="bg-white rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 h-fit">
               {/* Ana Görsel */}
               <div className="mb-3 sm:mb-4">
-                <img 
-                  src={selectedProduct.images[selectedImageIndex]} 
+                <img
+                  src={selectedProduct.images[selectedImageIndex]}
                   alt={selectedProduct.name}
                   className="w-full aspect-square object-cover rounded-lg border border-gray-200"
                 />
               </div>
-              
+
               {/* Küçük Görseller */}
               {selectedProduct.images.length > 1 && (
                 <div className="flex space-x-2 sm:space-x-3 overflow-x-auto">
@@ -1054,12 +1063,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     <button
                       key={index}
                       onClick={() => setSelectedImageIndex(index)}
-                      className={`flex-shrink-0 w-16 sm:w-20 h-16 sm:h-20 rounded-lg border-2 overflow-hidden ${
-                        selectedImageIndex === index ? 'border-[#6434F8]' : 'border-gray-200'
-                      }`}
+                      className={`flex-shrink-0 w-16 sm:w-20 h-16 sm:h-20 rounded-lg border-2 overflow-hidden ${selectedImageIndex === index ? 'border-[#6434F8]' : 'border-gray-200'
+                        }`}
                     >
-                      <img 
-                        src={image} 
+                      <img
+                        src={image}
                         alt={`${selectedProduct.name} ${index + 1}`}
                         className="w-full h-full object-cover"
                       />
@@ -1073,24 +1081,24 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           {/* Sağ Taraf - Ürün Bilgileri */}
           <div className="lg:w-1/2">
             <div className="bg-white rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 h-fit">
-              
+
               {/* Ürün Başlık ve Fiyat */}
               <div className="mb-6">
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-[#1F1F1F] mb-2">{selectedProduct.name}</h1>
                 <p className="text-sm sm:text-base lg:text-lg text-[#666] mb-3 sm:mb-4">{selectedProduct.category}</p>
-                <div 
+                <div
                   className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-4"
                   style={{ color: selectedStore.primaryColor }}
                 >
                   {selectedProduct.price}
                 </div>
-                
+
                 {/* Rating */}
                 <div className="flex items-center space-x-2 mb-4 sm:mb-6">
                   <div className="flex items-center">
                     {[...Array(5)].map((_, i) => (
-                      <Star 
-                        key={i} 
+                      <Star
+                        key={i}
                         className={`w-4 sm:w-5 h-4 sm:h-5 ${i < Math.floor(selectedProduct.rating) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
                       />
                     ))}
@@ -1119,13 +1127,13 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                       <div key={review.id} className="border-b border-gray-100 pb-3 sm:pb-4 last:border-b-0">
                         <div className="flex items-start justify-between mb-1.5 sm:mb-2">
                           <div className="flex items-center space-x-2 sm:space-x-3">
-                            <div 
+                            <div
                               className="w-6 sm:w-8 h-6 sm:h-8 rounded-full flex items-center justify-center"
                               style={{
                                 background: `linear-gradient(to bottom right, ${selectedStore.primaryColor}10, ${selectedStore.secondaryColor}10)`
                               }}
                             >
-                              <span 
+                              <span
                                 className="text-xs font-medium"
                                 style={{ color: selectedStore.primaryColor }}
                               >
@@ -1139,8 +1147,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                           </div>
                           <div className="flex items-center">
                             {[...Array(5)].map((_, i) => (
-                              <Star 
-                                key={i} 
+                              <Star
+                                key={i}
                                 className={`w-2.5 sm:w-3 h-2.5 sm:h-3 ${i < review.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
                               />
                             ))}
@@ -1158,7 +1166,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
               </div>
 
               {/* Sepete Ekle Butonu */}
-              <button 
+              <button
                 className="w-full text-white py-3 sm:py-4 rounded-lg font-medium text-base sm:text-lg transition-all duration-300 mt-4 sm:mt-6"
                 style={{
                   background: `linear-gradient(135deg, ${selectedStore.primaryColor}, ${selectedStore.secondaryColor})`,
@@ -1180,14 +1188,15 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
         {/* Chatbox Component - Sağ Alt Köşe - Dinamik Entegrasyon */}
         {chatboxConfig && (
-          <div className={`fixed z-50 ${
-            chatboxConfig.position === 'bottom-right' ? 'bottom-6 right-6' :
-            chatboxConfig.position === 'bottom-left' ? 'bottom-6 left-6' :
-            chatboxConfig.position === 'top-right' ? 'top-6 right-6' :
-            chatboxConfig.position === 'top-left' ? 'top-6 left-6' :
-            'bottom-6 right-6' // default
-          }`}>
+          <div className={`fixed z-50 ${chatboxConfig.position === 'bottom-right' ? 'bottom-6 right-6' :
+              chatboxConfig.position === 'bottom-left' ? 'bottom-6 left-6' :
+                chatboxConfig.position === 'top-right' ? 'top-6 right-6' :
+                  chatboxConfig.position === 'top-left' ? 'top-6 left-6' :
+                    'bottom-6 right-6' // default
+            }`}>
             <VirtualStoreChatboxAndButtons
+              key={chatboxConfig.id}
+              chatbotId={chatboxConfig.id}
               chatboxTitle={chatboxConfig.chatbox_title}
               initialMessage={chatboxConfig.initial_message}
               colors={{
@@ -1214,7 +1223,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   if (showAddStorePage || showEditStorePage) {
     return (
       <div className="relative">
-        
+
         {/* Mağaza Banner */}
         <div className="bg-white rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 mb-4 sm:mb-6 mx-3 sm:mx-6 lg:mx-12 xl:mx-20 mt-3 sm:mt-4 lg:mt-5">
           <div className="flex items-center justify-between">
@@ -1226,17 +1235,17 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
               >
                 <ArrowLeft className="w-4 sm:w-5 h-4 sm:h-5 text-[#666]" />
               </button>
-              
+
               {/* İkon */}
-              <div 
+              <div
                 className="w-8 sm:w-10 lg:w-12 h-8 sm:h-10 lg:h-12 rounded-full flex items-center justify-center border"
                 style={{
                   background: `linear-gradient(to bottom right, ${themeColors.primary}10, ${themeColors.secondary}10)`,
                   borderColor: `${themeColors.primary}20`
                 }}
               >
-                <Plus 
-                  className="w-4 sm:w-5 lg:w-6 h-4 sm:h-5 lg:h-6" 
+                <Plus
+                  className="w-4 sm:w-5 lg:w-6 h-4 sm:h-5 lg:h-6"
                   style={{ color: themeColors.primary }}
                 />
               </div>
@@ -1256,11 +1265,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
         {/* Mağaza Ekleme Formu */}
         <div className="flex flex-col xl:flex-row gap-4 sm:gap-6 xl:gap-8 mx-3 sm:mx-6 lg:mx-12 xl:mx-20">
-          
+
           {/* Sol Taraf - Form */}
           <div className="w-full xl:w-1/2">
             <div className="bg-white rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 h-fit space-y-3 sm:space-y-4 lg:space-y-6">
-              
+
               {/* Mağaza İsmi */}
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-[#1F1F1F] mb-1 sm:mb-2">
@@ -1269,7 +1278,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 <input
                   type="text"
                   value={newStore.name}
-                  onChange={(e) => setNewStore({...newStore, name: e.target.value})}
+                  onChange={(e) => setNewStore({ ...newStore, name: e.target.value })}
                   placeholder="Mağaza ismini girin"
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-gray-900 placeholder-gray-500 text-sm sm:text-base"
                 />
@@ -1282,7 +1291,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 </label>
                 <textarea
                   value={newStore.description}
-                  onChange={(e) => setNewStore({...newStore, description: e.target.value})}
+                  onChange={(e) => setNewStore({ ...newStore, description: e.target.value })}
                   placeholder="Mağazanızın açıklamasını yazın"
                   rows={4}
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors resize-none text-gray-900 placeholder-gray-500 text-sm sm:text-base"
@@ -1386,7 +1395,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   Mağaza Logosu
                 </label>
                 <div className="space-y-3">
-                  <div 
+                  <div
                     className="w-full h-24 sm:h-28 lg:h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-colors"
                     onClick={() => document.getElementById('logoInput').click()}
                     onMouseEnter={(e) => {
@@ -1399,15 +1408,15 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     }}
                   >
                     {newStore.logoPreview ? (
-                      <img 
-                        src={newStore.logoPreview} 
+                      <img
+                        src={newStore.logoPreview}
                         alt="Logo Preview"
                         className="max-w-full max-h-full object-contain rounded-lg"
                       />
                     ) : (
                       <div className="text-center">
-                        <Upload 
-                          className="w-6 sm:w-7 lg:w-8 h-6 sm:h-7 lg:h-8 mx-auto mb-1 sm:mb-2" 
+                        <Upload
+                          className="w-6 sm:w-7 lg:w-8 h-6 sm:h-7 lg:h-8 mx-auto mb-1 sm:mb-2"
                           style={{ color: themeColors.primary }}
                         />
                         <p className="text-xs sm:text-sm text-gray-600">Logo yüklemek için tıklayın</p>
@@ -1424,7 +1433,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   />
                   {newStore.logoPreview && (
                     <button
-                      onClick={() => setNewStore({...newStore, logo: '', logoPreview: ''})}
+                      onClick={() => setNewStore({ ...newStore, logo: '', logoPreview: '' })}
                       className="text-sm text-red-500 hover:text-red-700 transition-colors"
                     >
                       Logoyu kaldır
@@ -1438,7 +1447,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 <label className="block text-xs sm:text-sm font-medium text-[#1F1F1F] mb-2 sm:mb-3">
                   Mağaza Renkleri
                 </label>
-                
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                   {/* Ana Renk */}
                   <div className="flex flex-col space-y-1.5 sm:space-y-2 relative flex-1">
@@ -1452,8 +1461,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                         🎨
                       </div>
                       <div className="relative flex-1 h-6 sm:h-7 lg:h-8">
-                        <div 
-                          className="w-full h-full rounded-md sm:rounded-lg border border-gray-400 sm:border-[#555] shadow-inner" 
+                        <div
+                          className="w-full h-full rounded-md sm:rounded-lg border border-gray-400 sm:border-[#555] shadow-inner"
                           style={{ backgroundColor: newStore.primaryColor }}
                         ></div>
                       </div>
@@ -1480,8 +1489,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                         🎨
                       </div>
                       <div className="relative flex-1 h-6 sm:h-7 lg:h-8">
-                        <div 
-                          className="w-full h-full rounded-md sm:rounded-lg border border-gray-400 sm:border-[#555] shadow-inner" 
+                        <div
+                          className="w-full h-full rounded-md sm:rounded-lg border border-gray-400 sm:border-[#555] shadow-inner"
                           style={{ backgroundColor: newStore.secondaryColor }}
                         ></div>
                       </div>
@@ -1508,8 +1517,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                         🎨
                       </div>
                       <div className="relative flex-1 h-6 sm:h-7 lg:h-8">
-                        <div 
-                          className="w-full h-full rounded-md sm:rounded-lg border border-gray-400 sm:border-[#555] shadow-inner" 
+                        <div
+                          className="w-full h-full rounded-md sm:rounded-lg border border-gray-400 sm:border-[#555] shadow-inner"
                           style={{ backgroundColor: newStore.textColor }}
                         ></div>
                       </div>
@@ -1539,7 +1548,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   onClick={showEditStorePage ? handleUpdateStore : handleCreateStore}
                   disabled={showEditStorePage
                     ? (!newStore.name || !newStore.selectedBrandId || !newStore.logoPreview ||
-                       (editingStore &&
+                      (editingStore &&
                         newStore.name === editingStore.name &&
                         newStore.description === (editingStore.description || '') &&
                         newStore.selectedBrandId === editingStore.brand_id &&
@@ -1575,7 +1584,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           <div className="w-full xl:w-1/2">
             <div className="bg-white rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 h-fit">
               <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">
-                <span 
+                <span
                   className="bg-gradient-to-r bg-clip-text text-transparent"
                   style={{
                     backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
@@ -1584,11 +1593,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   Önizleme
                 </span>
               </h3>
-              
+
               {/* Mağaza Kartı Önizleme */}
-              <div 
+              <div
                 className="rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100"
-                style={{ 
+                style={{
                   height: '160px',
                   background: `linear-gradient(135deg, ${newStore.primaryColor}, ${newStore.secondaryColor})`
                 }}
@@ -1612,8 +1621,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   {/* Logo */}
                   <div className="w-14 sm:w-16 lg:w-18 h-14 sm:h-16 lg:h-18 rounded-full flex items-center justify-center border border-white/30 flex-shrink-0 overflow-hidden bg-white/20 backdrop-blur-sm">
                     {newStore.logoPreview ? (
-                      <img 
-                        src={newStore.logoPreview} 
+                      <img
+                        src={newStore.logoPreview}
                         alt="Preview"
                         className="w-full h-full object-cover"
                       />
@@ -1653,21 +1662,21 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 <h4 className="text-sm font-medium text-[#1F1F1F] mb-3">Seçilen Renkler:</h4>
                 <div className="flex space-x-4">
                   <div className="flex items-center space-x-2">
-                    <div 
+                    <div
                       className="w-6 h-6 rounded-full border border-gray-300"
                       style={{ backgroundColor: newStore.primaryColor }}
                     ></div>
                     <span className="text-xs text-[#666]">Ana Renk</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <div 
+                    <div
                       className="w-6 h-6 rounded-full border border-gray-300"
                       style={{ backgroundColor: newStore.secondaryColor }}
                     ></div>
                     <span className="text-xs text-[#666]">İkincil Renk</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <div 
+                    <div
                       className="w-6 h-6 rounded-full border border-gray-300"
                       style={{ backgroundColor: newStore.textColor }}
                     ></div>
@@ -1688,7 +1697,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   if (showAddProductPage || showEditProductPage) {
     return (
       <div className="relative">
-        
+
         {/* Ürün Ekleme Banner */}
         <div className="bg-white rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 mb-4 sm:mb-6 mx-3 sm:mx-6 lg:mx-12 xl:mx-20 mt-3 sm:mt-4 lg:mt-5">
           <div className="flex items-center justify-between">
@@ -1700,17 +1709,17 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
               >
                 <ArrowLeft className="w-4 sm:w-5 h-4 sm:h-5 text-[#666]" />
               </button>
-              
+
               {/* İkon */}
-              <div 
+              <div
                 className="w-8 sm:w-10 lg:w-12 h-8 sm:h-10 lg:h-12 rounded-full flex items-center justify-center border"
                 style={{
                   background: `linear-gradient(to bottom right, ${themeColors.primary}10, ${themeColors.secondary}10)`,
                   borderColor: `${themeColors.primary}20`
                 }}
               >
-                <Plus 
-                  className="w-4 sm:w-5 lg:w-6 h-4 sm:h-5 lg:h-6" 
+                <Plus
+                  className="w-4 sm:w-5 lg:w-6 h-4 sm:h-5 lg:h-6"
                   style={{ color: themeColors.primary }}
                 />
               </div>
@@ -1730,11 +1739,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
         {/* Ürün Ekleme Formu */}
         <div className="flex flex-col xl:flex-row gap-4 sm:gap-6 xl:gap-8 mx-3 sm:mx-6 lg:mx-12 xl:mx-20">
-          
+
           {/* Sol Taraf - Form */}
           <div className="w-full xl:w-1/2">
             <div className="bg-white rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 h-full space-y-3 sm:space-y-4 lg:space-y-6">
-              
+
               {/* Ürün Adı */}
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-[#1F1F1F] mb-1 sm:mb-2">
@@ -1743,7 +1752,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 <input
                   type="text"
                   value={newProduct.name}
-                  onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
+                  onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
                   placeholder="Ürün adını girin"
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-gray-900 placeholder-gray-500 text-sm sm:text-base"
                 />
@@ -1757,7 +1766,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 <input
                   type="text"
                   value={newProduct.price}
-                  onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                  onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
                   placeholder="₺0.00 - Ürün fiyatını girin"
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-gray-900 placeholder-gray-500 text-sm sm:text-base"
                 />
@@ -1771,7 +1780,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 <input
                   type="text"
                   value={newProduct.category}
-                  onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
+                  onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
                   placeholder="Telefon, Laptop, Aksesuar vb. - Kategori girin"
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors text-gray-900 placeholder-gray-500 text-sm sm:text-base"
                 />
@@ -1784,7 +1793,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 </label>
                 <textarea
                   value={newProduct.description}
-                  onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
+                  onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
                   placeholder="Ürün hakkında detaylı bilgi, özellikler, kullanım alanları... Buraya ürünün açıklamasını yazın."
                   rows="4"
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#6434F8] focus:ring-1 focus:ring-[#6434F8] transition-colors resize-none text-gray-900 placeholder-gray-500 text-sm sm:text-base"
@@ -1801,12 +1810,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     <button
                       key={count}
                       type="button"
-                      onClick={() => setNewProduct({...newProduct, reviewCount: count})}
-                      className={`px-3 sm:px-4 py-2 sm:py-3 border rounded-lg font-medium transition-all duration-300 text-sm sm:text-base ${
-                        newProduct.reviewCount === count
+                      onClick={() => setNewProduct({ ...newProduct, reviewCount: count })}
+                      className={`px-3 sm:px-4 py-2 sm:py-3 border rounded-lg font-medium transition-all duration-300 text-sm sm:text-base ${newProduct.reviewCount === count
                           ? 'text-white'
                           : 'border-gray-200 bg-white text-[#666]'
-                      }`}
+                        }`}
                       style={{
                         ...(newProduct.reviewCount === count && {
                           borderColor: themeColors.primary,
@@ -1849,8 +1857,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     <div className="grid grid-cols-3 gap-2 sm:gap-3">
                       {newProduct.imagePreviews.map((preview, index) => (
                         <div key={index} className="relative group">
-                          <img 
-                            src={preview} 
+                          <img
+                            src={preview}
                             alt={`Ürün görseli ${index + 1}`}
                             className="w-full aspect-square object-cover rounded-lg border border-gray-200"
                           />
@@ -1870,8 +1878,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                       ))}
                     </div>
                   )}
-                  
-                  <div 
+
+                  <div
                     className="w-full h-24 sm:h-28 lg:h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-colors"
                     onClick={() => document.getElementById('productImageInput').click()}
                     onMouseEnter={(e) => {
@@ -1884,13 +1892,13 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                     }}
                   >
                     <div className="text-center">
-                      <Upload 
-                        className="w-6 sm:w-7 lg:w-8 h-6 sm:h-7 lg:h-8 mx-auto mb-1 sm:mb-2" 
+                      <Upload
+                        className="w-6 sm:w-7 lg:w-8 h-6 sm:h-7 lg:h-8 mx-auto mb-1 sm:mb-2"
                         style={{ color: themeColors.primary }}
                       />
                       <p className="text-xs sm:text-sm text-gray-600">
-                        {newProduct.imagePreviews.length > 0 
-                          ? 'Daha fazla görsel eklemek için tıklayın' 
+                        {newProduct.imagePreviews.length > 0
+                          ? 'Daha fazla görsel eklemek için tıklayın'
                           : 'Ürün görsellerini yüklemek için tıklayın'
                         }
                       </p>
@@ -1907,7 +1915,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                       const files = Array.from(e.target.files)
                       if (files.length > 0) {
                         const validFiles = files.filter(file => file.type.startsWith('image/'))
-                        
+
                         const fileReaders = validFiles.map(file => {
                           return new Promise((resolve) => {
                             const reader = new FileReader()
@@ -2025,7 +2033,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   }}
                   disabled={isCreatingProduct || (showEditProductPage
                     ? (!newProduct.name || !newProduct.price || !newProduct.category || !newProduct.description || newProduct.imagePreviews.length === 0 ||
-                       (editingProduct &&
+                      (editingProduct &&
                         newProduct.name === editingProduct.name &&
                         newProduct.price === editingProduct.price &&
                         newProduct.category === editingProduct.category &&
@@ -2060,7 +2068,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           <div className="w-full xl:w-1/2">
             <div className="bg-white rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 h-full flex flex-col">
               <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">
-                <span 
+                <span
                   className="bg-gradient-to-r bg-clip-text text-transparent"
                   style={{
                     backgroundImage: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
@@ -2069,15 +2077,15 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   Önizleme
                 </span>
               </h3>
-              
+
               {/* Ürün Kartı Önizleme */}
               <div className="bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 flex-1 flex flex-col">
                 {/* Görsel Alan */}
                 <div className="mb-4 sm:mb-6 flex-1 w-full flex justify-center">
                   <div className="aspect-[3/4] w-[70%] border-2 border-dashed border-gray-200 rounded-md sm:rounded-lg flex items-center justify-center overflow-hidden">
                     {newProduct.imagePreviews.length > 0 ? (
-                      <img 
-                        src={newProduct.imagePreviews[0]} 
+                      <img
+                        src={newProduct.imagePreviews[0]}
                         alt="Ürün önizleme"
                         className="w-full h-full object-cover rounded-md sm:rounded-lg"
                       />
@@ -2102,7 +2110,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                       {newProduct.category || 'Kategori'}
                     </p>
                   </div>
-                  <div 
+                  <div
                     className="text-lg sm:text-xl lg:text-2xl font-bold"
                     style={{ color: themeColors.primary }}
                   >
@@ -2125,9 +2133,9 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                   <h4 className="text-sm font-medium text-[#1F1F1F] mb-3">Tüm Görseller ({newProduct.imagePreviews.length}):</h4>
                   <div className="grid grid-cols-4 gap-2">
                     {newProduct.imagePreviews.map((preview, index) => (
-                      <img 
+                      <img
                         key={index}
-                        src={preview} 
+                        src={preview}
                         alt={`Görsel ${index + 1}`}
                         className="w-full aspect-square object-cover rounded border border-gray-200"
                       />
@@ -2173,14 +2181,14 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
   // Eğer bir mağaza seçildiyse detay sayfasını göster
   if (selectedStore) {
     const storeProducts = products[selectedStore.id] || []
-    
+
     return (
       <div className="relative">
-        
+
         {/* Mağaza Banner */}
-        <div 
-          className="rounded-xl p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 mb-6 mx-3 sm:mx-6 lg:mx-12 xl:mx-20 mt-3 sm:mt-4 lg:mt-5" 
-          style={{ 
+        <div
+          className="rounded-xl p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] border border-gray-100 mb-6 mx-3 sm:mx-6 lg:mx-12 xl:mx-20 mt-3 sm:mt-4 lg:mt-5"
+          style={{
             background: `linear-gradient(135deg, ${selectedStore.primaryColor}, ${selectedStore.secondaryColor})`
           }}
         >
@@ -2193,11 +2201,11 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
               >
                 <ArrowLeft className="w-4 sm:w-5 h-4 sm:h-5 text-white/70" />
               </button>
-              
+
               {/* Mağaza Logo */}
               <div className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 rounded-full flex items-center justify-center border border-white/30 overflow-hidden bg-white/20 backdrop-blur-sm">
-                <img 
-                  src={selectedStore.logo} 
+                <img
+                  src={selectedStore.logo}
                   alt={selectedStore.name}
                   className="w-full h-full object-cover"
                 />
@@ -2213,11 +2221,10 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
             </div>
 
             {/* Durum */}
-            <div className={`px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-full text-xs sm:text-sm font-medium ${
-              selectedStore.status === 'active' 
-                ? 'bg-white/20 backdrop-blur-sm' 
+            <div className={`px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-full text-xs sm:text-sm font-medium ${selectedStore.status === 'active'
+                ? 'bg-white/20 backdrop-blur-sm'
                 : 'bg-white/10 backdrop-blur-sm'
-            }`} style={{ color: selectedStore.textColor || '#FFFFFF' }}>
+              }`} style={{ color: selectedStore.textColor || '#FFFFFF' }}>
               <span className="hidden sm:inline">{selectedStore.status === 'active' ? 'Aktif Çalışıyor' : 'Aktif Çalışmıyor'}</span>
               <span className="sm:hidden">{selectedStore.status === 'active' ? 'Aktif' : 'Pasif'}</span>
             </div>
@@ -2312,12 +2319,12 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
               </div>
             </div>
           ))}
-          
+
           {/* Yeni Ürün Ekle Kartı */}
-          <div 
+          <div
             onClick={handleAddProductClick}
             className={`bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] hover:scale-105 group border-2 border-dashed cursor-pointer transition-all duration-300 aspect-[3/4] ${getCardAnimation(storeProducts.length)}`}
-            style={{ 
+            style={{
               animationDelay: getAnimationDelay(storeProducts.length),
               borderColor: `${selectedStore.primaryColor}30`,
             }}
@@ -2331,19 +2338,19 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
             }}
           >
             {/* Görsel Alan - Diğer kartlarla aynı oran */}
-            <div 
+            <div
               className="mb-2 sm:mb-3 flex items-center justify-center aspect-[3/4] border-2 border-dashed rounded-md sm:rounded-lg"
               style={{ borderColor: `${selectedStore.primaryColor}20` }}
             >
-              <div 
+              <div
                 className="w-12 sm:w-14 lg:w-16 h-12 sm:h-14 lg:h-16 rounded-md sm:rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform border"
                 style={{
                   background: `linear-gradient(to bottom right, ${selectedStore.primaryColor}10, ${selectedStore.secondaryColor}10)`,
                   borderColor: `${selectedStore.primaryColor}20`
                 }}
               >
-                <Plus 
-                  className="w-6 sm:w-7 lg:w-8 h-6 sm:h-7 lg:h-8" 
+                <Plus
+                  className="w-6 sm:w-7 lg:w-8 h-6 sm:h-7 lg:h-8"
                   style={{ color: selectedStore.primaryColor }}
                 />
               </div>
@@ -2352,7 +2359,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
             {/* Ürün Bilgileri - Diğer kartlarla aynı düzen */}
             <div className="text-center flex-1 flex flex-col justify-between">
               <div>
-                <h3 
+                <h3
                   className="text-xs sm:text-sm font-bold mb-0.5 sm:mb-1"
                   style={{ color: selectedStore.primaryColor }}
                 >
@@ -2370,9 +2377,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
         {/* Product Delete Confirmation Card - Sağ Alt Köşe */}
         {showProductDeleteCard && productToDelete && (
-          <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 max-w-sm w-full sm:w-auto z-50 transform transition-all duration-300 ease-out ${
-            isProductCardClosing ? 'animate-slide-to-right' : 'animate-slide-from-right'
-          }`}>
+          <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 max-w-sm w-full sm:w-auto z-50 transform transition-all duration-300 ease-out ${isProductCardClosing ? 'animate-slide-to-right' : 'animate-slide-from-right'
+            }`}>
             <div className="flex items-start space-x-4">
               {/* Icon */}
               <div className="flex-shrink-0">
@@ -2433,31 +2439,32 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           // Ürün sayfası ise zaten sadece ürün chatbox'ı yüklenmiş, göster
           selectedProduct !== null || chatboxConfig.show_on_homepage
         ) && (
-          <div className={`fixed z-50 ${
-            chatboxConfig.position === 'bottom-right' ? 'bottom-6 right-6' :
-            chatboxConfig.position === 'bottom-left' ? 'bottom-6 left-6' :
-            chatboxConfig.position === 'top-right' ? 'top-6 right-6' :
-            chatboxConfig.position === 'top-left' ? 'top-6 left-6' :
-            'bottom-6 right-6' // default
-          }`}>
-            <VirtualStoreChatboxAndButtons
-              chatboxTitle={chatboxConfig.chatbox_title}
-              initialMessage={chatboxConfig.initial_message}
-              colors={{
-                primary: chatboxConfig.primary_color,
-                aiMessage: chatboxConfig.ai_message_color,
-                userMessage: chatboxConfig.user_message_color,
-                borderColor: chatboxConfig.button_border_color,
-                aiTextColor: chatboxConfig.ai_text_color,
-                userTextColor: chatboxConfig.user_text_color,
-                buttonPrimary: chatboxConfig.button_primary_color,
-                buttonIcon: chatboxConfig.button_icon_color
-              }}
-              isVisible={isChatboxVisible}
-              onToggle={() => setIsChatboxVisible(!isChatboxVisible)}
-            />
-          </div>
-        )}
+            <div className={`fixed z-50 ${chatboxConfig.position === 'bottom-right' ? 'bottom-6 right-6' :
+                chatboxConfig.position === 'bottom-left' ? 'bottom-6 left-6' :
+                  chatboxConfig.position === 'top-right' ? 'top-6 right-6' :
+                    chatboxConfig.position === 'top-left' ? 'top-6 left-6' :
+                      'bottom-6 right-6' // default
+              }`}>
+              <VirtualStoreChatboxAndButtons
+                key={chatboxConfig.id}
+                chatbotId={chatboxConfig.id}
+                chatboxTitle={chatboxConfig.chatbox_title}
+                initialMessage={chatboxConfig.initial_message}
+                colors={{
+                  primary: chatboxConfig.primary_color,
+                  aiMessage: chatboxConfig.ai_message_color,
+                  userMessage: chatboxConfig.user_message_color,
+                  borderColor: chatboxConfig.button_border_color,
+                  aiTextColor: chatboxConfig.ai_text_color,
+                  userTextColor: chatboxConfig.user_text_color,
+                  buttonPrimary: chatboxConfig.button_primary_color,
+                  buttonIcon: chatboxConfig.button_icon_color
+                }}
+                isVisible={isChatboxVisible}
+                onToggle={() => setIsChatboxVisible(!isChatboxVisible)}
+              />
+            </div>
+          )}
 
       </div>
     )
@@ -2469,7 +2476,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
       {/* Mağaza Kartları Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mx-3 sm:mx-6 lg:mx-12 xl:mx-20 mt-3 sm:mt-4 lg:mt-5">
         {storeList.map((store, index) => (
-          <div 
+          <div
             key={store.id}
             onClick={() => handleStoreClick(store)}
             className={`rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] hover:shadow-[0px_12px_32px_rgba(100,52,248,0.12)] hover:scale-105 group border border-transparent hover:border-[#6434F8]/20 cursor-pointer ${getCardAnimation(index)}`}
@@ -2547,8 +2554,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
             <div className="flex items-center space-x-2 sm:space-x-3 lg:space-x-4">
               {/* Mağaza Logo */}
               <div className="w-14 sm:w-16 lg:w-18 h-14 sm:h-16 lg:h-18 rounded-full flex items-center justify-center border border-white/30 flex-shrink-0 overflow-hidden bg-white/20 backdrop-blur-sm">
-                <img 
-                  src={store.logo} 
+                <img
+                  src={store.logo}
                   alt={store.name}
                   className="w-full h-full object-cover"
                 />
@@ -2560,11 +2567,10 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 <p className="text-xs sm:text-xs mb-1 sm:mb-1.5 lg:mb-2 truncate" style={{ color: `${store.text_color || store.textColor || '#FFFFFF'}80` }}>
                   {store.brand_id ? brands.find(b => b.id === store.brand_id)?.name || 'Marka' : 'Marka'} Mağazası
                 </p>
-                <div className={`inline-flex px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium ${
-                  store.status === 'active'
+                <div className={`inline-flex px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium ${store.status === 'active'
                     ? 'bg-white/20 backdrop-blur-sm'
                     : 'bg-white/10 backdrop-blur-sm'
-                }`} style={{ color: store.text_color || store.textColor || '#FFFFFF' }}>
+                  }`} style={{ color: store.text_color || store.textColor || '#FFFFFF' }}>
                   <span className="hidden sm:inline">{store.status === 'active' ? 'Aktif Çalışıyor' : 'Aktif Çalışmıyor'}</span>
                   <span className="sm:hidden">{store.status === 'active' ? 'Aktif' : 'Pasif'}</span>
                 </div>
@@ -2572,12 +2578,12 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
             </div>
           </div>
         ))}
-        
+
         {/* Yeni Mağaza Ekle Kartı */}
-        <div 
+        <div
           onClick={handleAddStoreClick}
           className={`bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6 shadow-[0px_4px_12px_rgba(0,0,0,0.05)] hover:scale-105 group border-2 border-dashed cursor-pointer transition-all duration-300 ${getCardAnimation(storeList.length)}`}
-          style={{ 
+          style={{
             animationDelay: getAnimationDelay(storeList.length),
             height: '160px',
             borderColor: `${themeColors.primary}30`,
@@ -2594,7 +2600,7 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
           {/* İçerik */}
           <div className="flex flex-col items-center justify-center h-full text-center">
             {/* Plus İkonu */}
-            <div 
+            <div
               className="w-10 sm:w-12 lg:w-14 h-10 sm:h-12 lg:h-14 rounded-full flex items-center justify-center mb-2 sm:mb-3 lg:mb-4 group-hover:scale-110 transition-transform"
               style={{
                 background: `linear-gradient(to bottom right, ${themeColors.primary}10, ${themeColors.secondary}10)`,
@@ -2602,15 +2608,15 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
                 border: '1px solid'
               }}
             >
-              <Plus 
-                className="w-5 sm:w-6 lg:w-7 h-5 sm:h-6 lg:h-7" 
+              <Plus
+                className="w-5 sm:w-6 lg:w-7 h-5 sm:h-6 lg:h-7"
                 style={{ color: themeColors.primary }}
               />
             </div>
 
             {/* Metin */}
             <div>
-              <h3 
+              <h3
                 className="text-xs sm:text-sm lg:text-base font-bold mb-0.5 sm:mb-1"
                 style={{ color: themeColors.primary }}
               >
@@ -2628,9 +2634,8 @@ export default function VirtualStore({ themeColors, storeList, setStoreList }) {
 
       {/* Delete Confirmation Card - Sağ Alt Köşe */}
       {showDeleteCard && storeToDelete && (
-        <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 max-w-sm w-full sm:w-auto z-50 transform transition-all duration-300 ease-out ${
-          isCardClosing ? 'animate-slide-to-right' : 'animate-slide-from-right'
-        }`}>
+        <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 max-w-sm w-full sm:w-auto z-50 transform transition-all duration-300 ease-out ${isCardClosing ? 'animate-slide-to-right' : 'animate-slide-from-right'
+          }`}>
           <div className="flex items-start space-x-4">
             {/* Icon */}
             <div className="flex-shrink-0">

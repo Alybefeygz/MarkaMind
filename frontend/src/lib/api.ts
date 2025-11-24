@@ -277,7 +277,7 @@ export async function getUserStores(): Promise<Store[]> {
   while (hasMore) {
     const response = await apiFetch<StoresListResponse>(`/stores/?page=${page}&size=${size}`)
     allStores.push(...response.items)
-    
+
     // Eğer dönen item sayısı size'dan azsa veya toplam sayfa sayısına ulaştıysak dur
     if (response.items.length < size || page >= response.pages) {
       hasMore = false
@@ -513,6 +513,32 @@ export async function uploadKnowledgeSource(
   formData.append('file', file)
 
   return apiUpload<KnowledgeSourceResponse>(`/chatboxes/${chatboxId}/knowledge-sources`, formData)
+}
+
+/**
+ * Upload temporary knowledge source (PDF) without chatbox assignment
+ * Used during chatbox creation flow
+ */
+export async function uploadTempKnowledgeSource(
+  file: File
+): Promise<KnowledgeSourceResponse> {
+  console.log('🚀 uploadTempKnowledgeSource called in api.ts')
+  const formData = new FormData()
+  formData.append('file', file)
+
+  return apiUpload<KnowledgeSourceResponse>(`/chatboxes/temp-knowledge-sources`, formData)
+}
+
+/**
+ * Assign pending PDFs (chatbot_id = NULL) to a chatbox
+ * Used after chatbox creation to link uploaded PDFs
+ */
+export async function assignPendingPDFsToChatbox(
+  chatboxId: string
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch(`/chatboxes/${chatboxId}/assign-pending-pdfs`, {
+    method: 'POST',
+  })
 }
 
 /**
@@ -782,4 +808,167 @@ export async function getAllChatboxIntegrations(): Promise<Record<string, {
     products: string[]
     stores_only: string[]
   }>>('/chatboxes/integrations/all')
+}
+
+// ============================================================================
+// Chat Message API Functions
+// ============================================================================
+
+export interface SendChatMessageRequest {
+  chatbot_id: string
+  message: string
+  session_id: string
+  user_id?: string
+  metadata?: Record<string, any>
+}
+
+export interface SendChatMessageResponse {
+  success: boolean
+  user_message_id: string
+  bot_message_id: string
+  bot_response: string
+  processing_time_ms: number
+  total_tokens?: number
+  source_chunks?: string[]
+  source_entry_id?: string
+  session_id: string
+}
+
+export interface ChatMessage {
+  id: string
+  chatbot_id: string
+  conversation_id?: string
+  session_id: string
+  user_id?: string
+  message_direction: 'incoming' | 'outgoing'
+  message_type: string
+  content: string
+  formatted_content?: Record<string, any>
+  ai_model?: string
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  processing_time_ms?: number
+  status: string
+  error_message?: string
+  source_chunks?: string[]
+  source_entry_id?: string
+  sentiment?: string
+  was_helpful?: boolean
+  user_feedback?: string
+  feedback_rating?: number
+  parent_message_id?: string
+  thread_id?: string
+  metadata: Record<string, any>
+  created_at: string
+  updated_at: string
+  read_at?: string
+}
+
+export interface ConversationHistoryResponse {
+  session_id: string
+  chatbot_id: string
+  messages: ChatMessage[]
+  total_messages: number
+  stats: {
+    total_user_messages: number
+    total_bot_messages: number
+    avg_response_time_ms: number
+    satisfaction_rate: number
+  }
+}
+
+export interface UpdateFeedbackRequest {
+  was_helpful?: boolean
+  sentiment?: 'positive' | 'negative' | 'neutral'
+  user_feedback?: string
+  feedback_rating?: number
+}
+
+/**
+ * Send a chat message and get AI response
+ *
+ * @param data - Message data including chatbot_id, message, session_id
+ * @returns Bot response with message IDs and metadata
+ */
+export async function sendChatMessage(
+  data: SendChatMessageRequest
+): Promise<SendChatMessageResponse> {
+  return apiFetch<SendChatMessageResponse>('/chat/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+}
+
+/**
+ * Get conversation history for a specific session
+ *
+ * @param sessionId - Session ID
+ * @param chatbotId - Chatbot ID
+ * @param limit - Maximum number of messages (default: 50)
+ * @returns Conversation history with messages and stats
+ */
+export async function getChatHistory(
+  sessionId: string,
+  chatbotId: string,
+  limit: number = 50
+): Promise<ConversationHistoryResponse> {
+  return apiFetch<ConversationHistoryResponse>(
+    `/chat/history/${sessionId}?chatbot_id=${chatbotId}&limit=${limit}`
+  )
+}
+
+/**
+ * Update message feedback (helpful/not helpful, rating, comment)
+ *
+ * @param messageId - Message ID
+ * @param feedback - Feedback data
+ * @returns Success status
+ */
+export async function updateMessageFeedback(
+  messageId: string,
+  feedback: UpdateFeedbackRequest
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(
+    `/chat/feedback/${messageId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(feedback),
+    }
+  )
+}
+
+/**
+ * Get a single message by ID
+ *
+ * @param messageId - Message ID
+ * @returns Message details
+ */
+export async function getChatMessage(messageId: string): Promise<ChatMessage> {
+  return apiFetch<ChatMessage>(`/chat/message/${messageId}`)
+}
+
+/**
+ * Delete all messages in a session
+ *
+ * @param sessionId - Session ID
+ * @param chatbotId - Chatbot ID
+ * @returns Success status
+ */
+export async function deleteChatSession(
+  sessionId: string,
+  chatbotId: string
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(
+    `/chat/session/${sessionId}?chatbot_id=${chatbotId}`,
+    {
+      method: 'DELETE',
+    }
+  )
 }
