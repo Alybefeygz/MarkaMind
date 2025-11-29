@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react'
 import { SketchPicker } from 'react-color'
 import ChatboxElements from './ChatboxElements'
 
-export default function ChatboxCreate({ themeColors, storeList, onBack, onSave }: { themeColors: unknown, storeList: unknown, onBack: () => void, onSave: (data: unknown) => void }) {
+export default function ChatboxCreate({ themeColors, storeList, onBack, onSave, createdChatboxId }: { themeColors: unknown, storeList: unknown, onBack: () => void, onSave: (data: unknown) => void, createdChatboxId?: string }) {
   // Yeni chatbox state'i
   const [newChatbox, setNewChatbox] = useState({
     name: '',
@@ -260,6 +260,8 @@ export default function ChatboxCreate({ themeColors, storeList, onBack, onSave }
             <div className="relative" style={{ minHeight: '850px', width: '100%' }}>
               <div className="absolute bottom-0 right-0">
                 <ChatboxElements
+                  chatbotId={createdChatboxId}
+                  isPreviewOnly={!createdChatboxId}
                   chatboxTitle={newChatbox.chatboxTitle}
                   initialMessage={newChatbox.initialMessage}
                   colors={newChatbox.colors}

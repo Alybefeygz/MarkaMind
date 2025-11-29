@@ -9,6 +9,7 @@ interface ChatboxElementsProps {
   initialMessage?: string
   chatbotId?: string  // ✅ Yeni: Chatbot ID
   userId?: string  // ✅ Yeni: User ID (opsiyonel)
+  isPreviewOnly?: boolean  // ✅ Yeni: Preview-only mod (backend'e istek atmaz)
   colors?: {
     primary?: string
     aiMessage?: string
@@ -39,6 +40,7 @@ export default function ChatboxElements({
   initialMessage = "Hello! It's Orbina here!",
   chatbotId,  // ✅ Yeni
   userId,  // ✅ Yeni
+  isPreviewOnly = false,  // ✅ Yeni: Preview-only mod
   colors = {
     primary: '#7B4DFA',
     aiMessage: '#E5E7EB',
@@ -92,19 +94,6 @@ export default function ChatboxElements({
   const handleSendMessage = async () => {
     if (!message.trim() || isLoading) return
 
-    // Chatbot ID kontrolü
-    if (!chatbotId) {
-      console.error('Chatbot ID is required')
-      const errorMessage: Message = {
-        id: `error_${Date.now()}`,
-        text: "Chatbot yapılandırması bulunamadı. Lütfen sayfayı yenileyin.",
-        sender: 'bot',
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, errorMessage])
-      return
-    }
-
     const userMessageText = message.trim()
     setMessage('')
     setIsLoading(true)
@@ -117,6 +106,36 @@ export default function ChatboxElements({
       timestamp: new Date()
     }
     setMessages(prev => [...prev, userMessage])
+
+    // ✅ YENİ: Preview-Only Mod Kontrolü
+    if (isPreviewOnly) {
+      // Mock bot yanıtı - Backend'e istek atmadan
+      setTimeout(() => {
+        const mockBotMessage: Message = {
+          id: `bot_${Date.now()}`,
+          text: "Chatbox'ınız henüz kaydedilmedi. Mesajlaşma özelliği chatbox kaydedildikten sonra aktif olacak.",
+          sender: 'bot',
+          timestamp: new Date()
+        }
+        setMessages(prev => [...prev, mockBotMessage])
+        setIsLoading(false)
+      }, 800) // Gerçekçi gecikme
+      return
+    }
+
+    // Chatbot ID kontrolü (sadece preview-only değilse)
+    if (!chatbotId) {
+      console.error('Chatbot ID is required')
+      const errorMessage: Message = {
+        id: `error_${Date.now()}`,
+        text: "Chatbot yapılandırması bulunamadı. Lütfen sayfayı yenileyin.",
+        sender: 'bot',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+      setIsLoading(false)
+      return
+    }
 
     try {
       // Backend'e mesaj gönder

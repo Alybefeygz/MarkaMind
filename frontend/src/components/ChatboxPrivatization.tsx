@@ -581,6 +581,8 @@ export default function ChatboxPrivatization({ selectedChatbox, themeColors, isC
 
         {/* Chatbox Elements */}
         <ChatboxElements
+          chatbotId={selectedChatbox?.id}
+          isPreviewOnly={isCreatingNew}
           chatboxTitle={tempChatboxTitle || chatboxTitle || 'Chatbox'}
           initialMessage={tempChatboxInitialMessage || chatboxInitialMessage || 'Merhaba!'}
           colors={{

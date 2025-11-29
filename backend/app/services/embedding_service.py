@@ -1,5 +1,3 @@
-import openai
-import httpx
 from typing import List, Dict, Optional, Any
 import os
 import asyncio
@@ -10,105 +8,61 @@ import re
 from datetime import datetime
 import time
 
-from app.services.ai_usage_log_service import ai_usage_log_service
-
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
     """
     AI and Embedding service for chatbot functionality
-    
-    Handles text embedding, similarity search, AI response generation,
-    and knowledge base processing using OpenRouter API.
+
+    Handles text processing, AI response generation (fallback mode),
+    and knowledge base processing.
+
+    Note: OpenRouter integration removed. Gemini API integration pending.
     """
     
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(self):
         """
         Initialize EmbeddingService
-        
-        Args:
-            api_key: OpenRouter API key (defaults to env var)
-            base_url: OpenRouter base URL (defaults to env var)
+
+        Note: OpenRouter integration removed.
+        TODO: Integrate Gemini API for AI responses
         """
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
-        self.base_url = base_url or os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        self.default_model = os.getenv("DEFAULT_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
-        self.embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
-        self.temperature = float(os.getenv("TEMPERATURE", "0.7"))
-        self.max_tokens = int(os.getenv("MAX_TOKENS", "4000"))
-        
         # Rate limiting
         self.rate_limit_calls = 60  # calls per minute
         self.rate_limit_window = 60  # seconds
         self.call_history = []
-        
-        # Configure OpenAI client for OpenRouter
-        if self.api_key:
-            openai.api_key = self.api_key
-            openai.api_base = self.base_url
-        
-        logger.info("EmbeddingService initialized")
+
+        logger.info("EmbeddingService initialized (temporary fallback mode)")
     
     async def generate_embedding(self, text: str) -> List[float]:
         """
-        Generate embedding vector for text
-        
+        Generate embedding vector for text (Temporary disabled)
+
         Args:
             text: Text to embed
-            
+
         Returns:
-            Embedding vector as list of floats
-            
+            Empty embedding vector (embedding generation disabled)
+
         Raises:
-            ValueError: If text is empty or too long
-            Exception: If API call fails
+            ValueError: If text is empty
         """
         try:
             if not text or not text.strip():
                 raise ValueError("Text cannot be empty")
-            
-            # Clean and truncate text
-            cleaned_text = self._clean_text(text)
-            if len(cleaned_text) > 8000:  # Reasonable limit for embeddings
-                cleaned_text = cleaned_text[:8000]
-                logger.warning("Text truncated for embedding generation")
-            
-            logger.info(f"Generating embedding for text ({len(cleaned_text)} chars)")
-            
-            # Rate limiting check
-            await self._check_rate_limit()
-            
-            # Generate embedding using OpenAI API (compatible with OpenRouter)
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/embeddings",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": self.embedding_model,
-                        "input": cleaned_text
-                    }
-                )
-                
-                if response.status_code != 200:
-                    error_msg = f"Embedding API error: {response.status_code} - {response.text}"
-                    logger.error(error_msg)
-                    raise Exception(error_msg)
-                
-                result = response.json()
-                embedding = result["data"][0]["embedding"]
-                
-                logger.info("Embedding generated successfully")
-                return embedding
-                
+
+            logger.info(f"Embedding generation skipped (not implemented)")
+
+            # TODO: Integrate Gemini API for embeddings
+            # Return empty embedding for now
+            return []
+
         except ValueError:
             raise
         except Exception as e:
             logger.error(f"Failed to generate embedding: {str(e)}")
-            raise Exception(f"Failed to generate embedding: {str(e)}")
+            return []
     
     async def find_similar_content(self, query_embedding: List[float], knowledge_base_id: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
@@ -169,7 +123,7 @@ class EmbeddingService:
         chatbot_id: Optional[str] = None
     ) -> str:
         """
-        Generate AI response using OpenRouter API
+        Generate AI response (Temporary fallback - AI integration pending)
 
         Args:
             user_message: User's message
@@ -183,141 +137,41 @@ class EmbeddingService:
 
         Raises:
             ValueError: If message is empty
-            Exception: If API call fails
         """
-        start_time = datetime.utcnow()
-        system_prompt = None
-        ai_response = None
-
         try:
             if not user_message or not user_message.strip():
                 raise ValueError("User message cannot be empty")
 
-            logger.info(f"Generating AI response for message: {user_message[:50]}...")
+            logger.info(f"Generating response for message: {user_message[:50]}...")
 
-            # Rate limiting check
-            await self._check_rate_limit()
-            
-            # Build context from similar content
-            context_text = ""
-            if context:
-                context_text = "\n\nRelevant information:\n"
-                for item in context[:3]:  # Use top 3 similar items
-                    context_text += f"- {item.get('content', '')}\n"
-            
-            # Create system prompt
+            # Get chatbot info
             chatbot_name = chatbot_config.get("name", "Assistant")
-            brand_name = chatbot_config.get("brand", {}).get("name", "Company")
 
-            system_prompt = f"""You are {chatbot_name}, a helpful AI assistant for {brand_name}.
-            Respond in a friendly, professional manner. If you don't know something, say so honestly.
-            Keep responses concise and helpful.{context_text}"""
+            # Temporary fallback response
+            # TODO: Integrate Gemini API for real AI responses
+            responses = [
+                f"Merhaba! Ben {chatbot_name}. Size nasıl yardımcı olabilirim?",
+                f"Mesajınızı aldım: '{user_message}'. Şu anda AI entegrasyonu tamamlanıyor.",
+                f"Teşekkürler! {chatbot_name} olarak size yardımcı olmak isterim.",
+            ]
 
-            # Generate response using OpenRouter
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                api_start_time = datetime.utcnow()
+            # Simple response based on message length
+            if len(user_message) < 20:
+                response = responses[0]
+            elif "?" in user_message:
+                response = responses[1]
+            else:
+                response = responses[2]
 
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": self.default_model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_message}
-                        ],
-                        "temperature": self.temperature,
-                        "max_tokens": min(self.max_tokens, 1000),  # Reasonable limit for chat
-                        "stream": False
-                    }
-                )
+            logger.info("Response generated successfully (fallback)")
+            return response
 
-                api_end_time = datetime.utcnow()
-                latency_ms = int((api_end_time - api_start_time).total_seconds() * 1000)
-
-                if response.status_code != 200:
-                    error_msg = f"AI API error: {response.status_code} - {response.text}"
-                    logger.error(error_msg)
-
-                    # ❌ Başarısız chat isteğini logla
-                    await ai_usage_log_service.log_ai_request(
-                        usage_type="chat_response",
-                        model_name=self.default_model,
-                        input_text=f"System: {system_prompt}\nUser: {user_message}",
-                        output_text=None,
-                        latency_ms=latency_ms,
-                        status="failed",
-                        conversation_id=conversation_id,
-                        chatbot_id=chatbot_id,
-                        error_message=f"API error: {response.status_code}",
-                        metadata={
-                            "temperature": self.temperature,
-                            "max_tokens": min(self.max_tokens, 1000)
-                        }
-                    )
-
-                    # Fallback response
-                    return f"I'm sorry, I'm having trouble processing your request right now. Please try again later."
-
-                result = response.json()
-                ai_response = result["choices"][0]["message"]["content"].strip()
-
-                # Token bilgilerini çek (OpenRouter format)
-                usage_data = result.get("usage", {})
-                input_tokens = usage_data.get("prompt_tokens", 0)
-                output_tokens = usage_data.get("completion_tokens", 0)
-                total_tokens = usage_data.get("total_tokens", 0)
-
-                # ✅ Başarılı chat isteğini logla (token bilgileriyle)
-                await ai_usage_log_service.log_ai_request(
-                    usage_type="chat_response",
-                    model_name=self.default_model,
-                    input_text=f"System: {system_prompt[:500]}\nUser: {user_message}",
-                    output_text=ai_response[:2000],
-                    latency_ms=latency_ms,
-                    status="success",
-                    conversation_id=conversation_id,
-                    chatbot_id=chatbot_id,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    total_tokens=total_tokens,
-                    metadata={
-                        "temperature": self.temperature,
-                        "max_tokens": min(self.max_tokens, 1000),
-                        "context_items": len(context)
-                    }
-                )
-
-                logger.info("AI response generated successfully")
-                return ai_response
-                
         except ValueError:
             raise
         except Exception as e:
-            logger.error(f"Failed to generate AI response: {str(e)}")
-
-            # Genel hataları logla
-            end_time = datetime.utcnow()
-            latency_ms = int((end_time - start_time).total_seconds() * 1000)
-
-            await ai_usage_log_service.log_ai_request(
-                usage_type="chat_response",
-                model_name=self.default_model,
-                input_text=f"System: {system_prompt or 'N/A'}\nUser: {user_message}",
-                output_text=ai_response,
-                latency_ms=latency_ms,
-                status="failed",
-                conversation_id=conversation_id,
-                chatbot_id=chatbot_id,
-                error_message=str(e)[:500],
-                metadata={"error_type": "general_error"}
-            )
-
-            # Return fallback response instead of raising
-            return f"Hello! I'm {chatbot_config.get('name', 'your assistant')}. How can I help you today?"
+            logger.error(f"Failed to generate response: {str(e)}")
+            # Return simple fallback
+            return f"Merhaba! Ben {chatbot_config.get('name', 'asistanınız')}. Size nasıl yardımcı olabilirim?"
     
     async def process_knowledge_content(self, content: str, chatbot_id: str, source_type: str = "text", source_url: Optional[str] = None) -> Dict[str, Any]:
         """

@@ -166,3 +166,40 @@ class ChatStatisticsResponse(BaseModel):
 
     messages_by_hour: List[Dict[str, Any]] = Field(default_factory=list)
     # Örnek: [{"hour": 14, "count": 123}, ...]
+
+
+# ============================================
+# USER-CHATBOT MESSAGES SCHEMAS
+# ============================================
+
+class SessionWithMessages(BaseModel):
+    """Session with all messages"""
+    session_id: str
+    ziyaretci_id: Optional[str] = None
+    first_message_at: datetime
+    last_message_at: datetime
+    message_count: int
+    user_message_count: int
+    bot_message_count: int
+    avg_response_time_ms: Optional[float] = None
+    satisfaction_rate: Optional[float] = None
+    messages: List[ChatMessageResponse]
+
+
+class PaginationInfo(BaseModel):
+    """Pagination information"""
+    page: int
+    size: int
+    total: int
+    total_pages: int
+
+
+class UserChatbotMessagesResponse(BaseModel):
+    """Response for user-chatbot messages"""
+    chatbot_id: UUID
+    user_id: Optional[UUID] = None
+    total_sessions: Optional[int] = None
+    total_messages: int
+    sessions: Optional[List[SessionWithMessages]] = None
+    messages: Optional[List[ChatMessageResponse]] = None
+    pagination: PaginationInfo

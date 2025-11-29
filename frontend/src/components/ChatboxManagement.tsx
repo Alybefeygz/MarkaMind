@@ -2890,6 +2890,8 @@ export default function ChatboxManagement({ selectedChatbox, activeTab, themeCol
 
         {/* Chatbox Elements */}
         <ChatboxElements
+          chatbotId={selectedChatbox?.id || createdChatboxId}
+          isPreviewOnly={isCreatingNew && !createdChatboxId}
           chatboxTitle={activeChatboxData?.chatbox_title || selectedChatbox?.name || 'Chatbox'}
           initialMessage={activeChatboxData?.initial_message || currentText || 'Merhaba!'}
           colors={{

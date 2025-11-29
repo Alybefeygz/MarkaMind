@@ -79,11 +79,19 @@ class ChatboxList(BaseModel):
     conversation_count: int = 0
     knowledge_source_count: int = 0
 
+    # Ana Renk
+    primary_color: str
+
+    # Mesaj Renkleri (MessagingRecords için gerekli)
+    ai_message_color: str
+    user_message_color: str
+    ai_text_color: str
+    user_text_color: str
+
     # Buton Renkleri (badge'ler için gerekli)
     button_primary_color: str
     button_border_color: str
     button_icon_color: str
-    primary_color: str  # Fallback için
 
     model_config = ConfigDict(from_attributes=True)
 

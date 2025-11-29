@@ -154,7 +154,24 @@ class ChatService:
             }
         """
         try:
-            # 1. Kullanıcı mesajını kaydet
+            # 1. Eğer conversation_id yoksa, yeni conversation oluştur
+            if not conversation_id:
+                logger.info(f"Creating new conversation for session: {session_id}")
+                conversation_result = self.supabase.table("conversations").insert({
+                    "chatbot_id": chatbot_id,
+                    "session_id": session_id,
+                    "user_input": user_message[:500],  # İlk 500 karakter
+                    "bot_response": "",  # Henüz yanıt yok
+                    "status": "active"
+                }).execute()
+
+                if not conversation_result.data:
+                    raise Exception("Failed to create conversation")
+
+                conversation_id = conversation_result.data[0]["id"]
+                logger.info(f"✅ New conversation created: {conversation_id}")
+
+            # 2. Kullanıcı mesajını kaydet
             user_message_record = await self.save_message(
                 chatbot_id=chatbot_id,
                 session_id=session_id,
@@ -245,10 +262,24 @@ class ChatService:
 
             bot_message_id = bot_message_record["id"]
 
+            # 7. Conversation'ı güncelle (bot response ve latency ekle)
+            try:
+                self.supabase.table("conversations").update({
+                    "bot_response": bot_response_data[:500],  # İlk 500 karakter
+                    "latency_ms": processing_time_ms,
+                    "source_entry_id": source_entry_id,
+                    "last_message_at": "now()",
+                    "message_count": 2  # User + Bot (şimdilik basit, ileride increment yapılabilir)
+                }).eq("id", conversation_id).execute()
+                logger.info(f"✅ Conversation updated: {conversation_id}")
+            except Exception as conv_error:
+                logger.warning(f"Failed to update conversation: {conv_error}")
+
             logger.info(f"✅ Chat completed: user_msg={user_message_id}, bot_msg={bot_message_id}")
 
             return {
                 "success": True,
+                "conversation_id": conversation_id,
                 "user_message_id": user_message_id,
                 "bot_message_id": bot_message_id,
                 "bot_response": bot_response_data,
@@ -262,16 +293,20 @@ class ChatService:
         except Exception as e:
             logger.error(f"❌ Error in send_message: {e}")
 
-            # Hata mesajı kaydet
-            await self.save_message(
-                chatbot_id=chatbot_id,
-                session_id=session_id,
-                message_direction="outgoing",
-                content=f"Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.",
-                status="failed",
-                error_message=str(e),
-                error_code="internal_error"
-            )
+            # Hata mesajı kaydet (conversation_id varsa kullan)
+            try:
+                await self.save_message(
+                    chatbot_id=chatbot_id,
+                    session_id=session_id,
+                    message_direction="outgoing",
+                    content=f"Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.",
+                    conversation_id=conversation_id if 'conversation_id' in locals() else None,
+                    status="failed",
+                    error_message=str(e),
+                    error_code="internal_error"
+                )
+            except Exception as save_error:
+                logger.error(f"❌ Failed to save error message: {save_error}")
 
             raise
 

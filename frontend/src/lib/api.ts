@@ -972,3 +972,110 @@ export async function deleteChatSession(
     }
   )
 }
+
+// ============================================
+// USER-CHATBOT MESSAGES
+// ============================================
+
+export interface ChatMessage {
+  id: string
+  chatbot_id: string
+  conversation_id?: string
+  session_id: string
+  user_id?: string
+  message_direction: 'incoming' | 'outgoing'
+  message_type: string
+  content: string
+  formatted_content?: any
+  ai_model?: string
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  processing_time_ms?: number
+  status: string
+  error_message?: string
+  source_chunks: string[]
+  source_entry_id?: string
+  sentiment?: string
+  was_helpful?: boolean
+  user_feedback?: string
+  feedback_rating?: number
+  parent_message_id?: string
+  thread_id?: string
+  metadata: any
+  created_at: string
+  updated_at: string
+  read_at?: string
+}
+
+export interface SessionWithMessages {
+  session_id: string
+  ziyaretci_id?: string
+  first_message_at: string
+  last_message_at: string
+  message_count: number
+  user_message_count: number
+  bot_message_count: number
+  avg_response_time_ms?: number
+  satisfaction_rate?: number
+  messages: ChatMessage[]
+}
+
+export interface PaginationInfo {
+  page: number
+  size: number
+  total: number
+  total_pages: number
+}
+
+export interface UserChatbotMessagesResponse {
+  chatbot_id: string
+  user_id?: string
+  total_sessions?: number
+  total_messages: number
+  sessions?: SessionWithMessages[]
+  messages?: ChatMessage[]
+  pagination: PaginationInfo
+}
+
+export interface GetChatbotUserMessagesOptions {
+  userId?: string
+  sessionId?: string
+  page?: number
+  size?: number
+  groupBySession?: boolean
+  includeVisitorInfo?: boolean
+  startDate?: string
+  endDate?: string
+}
+
+/**
+ * Get chatbot user messages
+ *
+ * Belirli bir chatbot'un kullanıcı mesajlarını getirir.
+ * Session bazlı gruplama ve ziyaretçi ID bilgisi dahil.
+ *
+ * @param chatbotId - Chatbot ID (zorunlu)
+ * @param options - Filtreleme ve pagination seçenekleri
+ * @returns Session bazlı gruplanmış mesajlar veya düz liste
+ */
+export async function getChatbotUserMessages(
+  chatbotId: string,
+  options?: GetChatbotUserMessagesOptions
+): Promise<UserChatbotMessagesResponse> {
+  const params = new URLSearchParams({
+    page: options?.page?.toString() || '1',
+    size: options?.size?.toString() || '50',
+    group_by_session: options?.groupBySession?.toString() || 'true',
+    include_visitor_info: options?.includeVisitorInfo?.toString() || 'true'
+  })
+
+  if (options?.userId) params.append('user_id', options.userId)
+  if (options?.sessionId) params.append('session_id', options.sessionId)
+  if (options?.startDate) params.append('start_date', options.startDate)
+  if (options?.endDate) params.append('end_date', options.endDate)
+
+  return apiFetch<UserChatbotMessagesResponse>(
+    `/chat/chatbots/${chatbotId}/messages?${params.toString()}`
+  )
+}

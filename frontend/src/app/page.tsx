@@ -632,7 +632,7 @@ export default function Home() {
                 setPageTitle({ bold: 'Chatbox', normal: 'Yönetimi' }) // Başlığı geri döndür
               }} chatboxData={newChatboxData} setChatboxData={setNewChatboxData} />}
               {currentPage === 2 && <VirtualStore themeColors={themeColors} storeList={storeList} setStoreList={setStoreList} />}
-              {currentPage === 3 && <MessagingRecords themeColors={themeColors} />}
+              {currentPage === 3 && <MessagingRecords themeColors={themeColors} selectedChatbox={selectedChatbox} />}
               {currentPage === 4 && <Profile themeColors={themeColors} />}
               {currentPage !== 1 && currentPage !== 2 && currentPage !== 3 && currentPage !== 4 && (
                 <div className="flex items-center justify-center h-96">
